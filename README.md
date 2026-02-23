@@ -1,51 +1,53 @@
 # PrusaMCP
 
-**MCP Server intelligent pour PrusaSlicer** — 17 tools pour analyser, configurer et lancer vos impressions 3D depuis Claude ou tout client MCP.
+**Intelligent MCP Server for PrusaSlicer** — 17 tools to analyze, configure and launch your 3D prints from Claude or any MCP client.
 
-PrusaMCP n'est pas un simple wrapper CLI. C'est un **assistant d'impression 3D** qui analyse votre mesh, recommande des paramètres optimaux avec justification, diagnostique les défauts, et peut piloter PrusaSlicer automatiquement.
+PrusaMCP is not a simple CLI wrapper. It's a **3D printing assistant** that analyzes your mesh, recommends optimal settings with justification, diagnoses defects, and can drive PrusaSlicer automatically.
+
+> Built with [Claude Code](https://claude.ai/claude-code).
 
 ## Features
 
-- **Analyse mesh native** — Parser STL binaire/ASCII et 3MF, zéro dépendance externe pour le parsing
-- **Moteur de recommandation** — Base de connaissances Bible FDM + Prusa officiel, justification pour chaque réglage
-- **MVS-based speed capping** — Calcul automatique des vitesses basé sur le Max Volumetric Speed du matériau
-- **17 tools MCP** couvrant tout le workflow d'impression
-- **Diagnostic post-print** — Arbre de diagnostic Bible FDM pour 9 défauts courants
-- **Base de filaments** — 30+ filaments avec températures, MVS, surface recommandée
+- **Native mesh analysis** — Binary/ASCII STL and 3MF parser, zero external dependencies for parsing
+- **Recommendation engine** — Bible FDM + official Prusa knowledge base, justification for every setting
+- **MVS-based speed capping** — Automatic speed calculation based on material Max Volumetric Speed
+- **17 MCP tools** covering the full print workflow
+- **Post-print diagnostics** — Bible FDM diagnostic tree for 9 common defects
+- **Filament database** — 30+ filaments with temperatures, MVS, recommended surface
 
 ## Tools
 
-### Analyse & Recommandation (sans PrusaSlicer)
+### Analysis & Recommendation (no PrusaSlicer needed)
 
 | Tool | Description |
 |------|-------------|
-| `analyze_mesh` | Analyse géométrique d'un STL/3MF (dimensions, volume, overhangs, manifold) |
-| `check_printability` | Détection de problèmes : murs fins, ponts, overhangs, stabilité |
-| `suggest_orientation` | Test de 6 orientations avec scoring (overhangs, hauteur, adhésion) |
-| `recommend_profile` | Recommandation de profil complet avec justification par réglage |
-| `generate_prusaslicer_config` | Génération de fichier .ini compatible PrusaSlicer |
-| `estimate_cost` | Estimation coût (filament + électricité) et temps d'impression |
-| `search_filament` | Recherche dans la base de filaments (30+ entrées) |
-| `print_wizard` | Assistant complet : analyse + printabilité + orientation + profil + questions |
-| `diagnose_print` | Diagnostic post-impression (warping, stringing, sous-extrusion...) |
+| `analyze_mesh` | Geometric analysis of STL/3MF (dimensions, volume, overhangs, manifold) |
+| `check_printability` | Issue detection: thin walls, bridges, overhangs, stability |
+| `suggest_orientation` | Test 6 orientations with scoring (overhangs, height, adhesion) |
+| `recommend_profile` | Full profile recommendation with per-setting justification |
+| `generate_prusaslicer_config` | Generate PrusaSlicer-compatible .ini file |
+| `estimate_cost` | Cost estimate (filament + electricity) and print time |
+| `search_filament` | Search filament database (30+ entries) |
+| `print_wizard` | All-in-one: analysis + printability + orientation + profile + questions |
+| `diagnose_print` | Post-print diagnosis (warping, stringing, under-extrusion...) |
 
 ### PrusaSlicer Integration
 
 | Tool | Description |
 |------|-------------|
-| `slice_prusaslicer` | Lancer le slicing via CLI avec stats G-code |
-| `get_current_model` | Récupérer le modèle ouvert dans PrusaSlicer |
-| `screenshot_prusaslicer` | Capture d'écran de PrusaSlicer (même en arrière-plan) |
-| `postprocess_gcode` | Post-processing G-code (pause, changement filament, etc.) |
-| `upload_print` | Upload vers OctoPrint / Prusa Connect |
+| `slice_prusaslicer` | Run slicing via CLI with G-code stats |
+| `get_current_model` | Get the model currently open in PrusaSlicer |
+| `screenshot_prusaslicer` | Capture PrusaSlicer window (even in background) |
+| `postprocess_gcode` | G-code post-processing (pause, filament change, etc.) |
+| `upload_print` | Upload to OctoPrint / Prusa Connect |
 
-### Feedback & Communauté
+### Feedback & Community
 
 | Tool | Description |
 |------|-------------|
-| `submit_feedback` | Soumettre un retour d'expérience après impression |
-| `feedback_stats` | Statistiques des retours par matériau/objectif |
-| `export_feedback` | Export anonymisé des données communautaires |
+| `submit_feedback` | Submit print feedback after printing |
+| `feedback_stats` | Feedback statistics by material/goal |
+| `export_feedback` | Anonymized community data export |
 
 ## Installation
 
@@ -60,14 +62,14 @@ npm run build
 
 ### Claude Desktop / Claude Code
 
-Ajoutez dans votre configuration MCP :
+Add to your MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "prusa-mcp": {
       "command": "node",
-      "args": ["C:/chemin/vers/PrusaMCP/build/index.js"],
+      "args": ["/path/to/PrusaMCP/build/index.js"],
       "env": {
         "PRUSASLICER_PATH": "C:/Program Files/Prusa3D/PrusaSlicer/prusa-slicer-console.exe"
       }
@@ -76,56 +78,56 @@ Ajoutez dans votre configuration MCP :
 }
 ```
 
-### Variables d'environnement
+### Environment Variables
 
-| Variable | Description | Défaut |
-|----------|-------------|--------|
-| `PRUSASLICER_PATH` | Chemin vers `prusa-slicer-console.exe` | Auto-détecté |
-| `PRUSASLICER_PROFILES_DIR` | Dossier des profils PrusaSlicer | `%APPDATA%/PrusaSlicer` |
-| `OCTOPRINT_URL` | URL de votre instance OctoPrint | — |
-| `OCTOPRINT_API_KEY` | Clé API OctoPrint | — |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PRUSASLICER_PATH` | Path to `prusa-slicer-console.exe` | Auto-detected |
+| `PRUSASLICER_PROFILES_DIR` | PrusaSlicer profiles folder | `%APPDATA%/PrusaSlicer` |
+| `OCTOPRINT_URL` | Your OctoPrint instance URL | — |
+| `OCTOPRINT_API_KEY` | OctoPrint API key | — |
 
-## Utilisation
+## Usage
 
-### Workflow typique
+### Typical Workflow
 
-1. **Analyser un modèle** : `analyze_mesh` pour connaître les dimensions, overhangs, etc.
-2. **Vérifier la printabilité** : `check_printability` pour détecter les problèmes potentiels
-3. **Obtenir une recommandation** : `recommend_profile` avec votre objectif (draft, standard, quality, strong, speed)
-4. **Générer la config** : `generate_prusaslicer_config` pour un .ini prêt à l'emploi
-5. **Slicer** : `slice_prusaslicer` pour générer le G-code
+1. **Analyze a model**: `analyze_mesh` to get dimensions, overhangs, etc.
+2. **Check printability**: `check_printability` to detect potential issues
+3. **Get a recommendation**: `recommend_profile` with your goal (draft, standard, quality, strong, speed)
+4. **Generate config**: `generate_prusaslicer_config` for a ready-to-use .ini
+5. **Slice**: `slice_prusaslicer` to generate G-code
 
-### Ou en une commande
+### Or in one command
 
-`print_wizard` fait tout d'un coup : analyse + printabilité + orientation + profil + estimation de coût + questions pour affiner.
+`print_wizard` does everything at once: analysis + printability + orientation + profile + cost estimate + follow-up questions to refine.
 
-### Objectifs disponibles
+### Available Goals
 
-| Objectif | Description |
-|----------|-------------|
-| `draft` / `prototype` | Rapide, qualité secondaire |
-| `standard` | Bon compromis qualité/temps |
-| `quality` / `beau rendu` | Surface lisse, détails fins |
-| `strong` / `solide` | Résistance mécanique maximale |
-| `vase` | Mode vase spirale |
-| `speed` | Tout à fond, buse grosse |
+| Goal | Description |
+|------|-------------|
+| `draft` / `prototype` | Fast, quality secondary |
+| `standard` | Good quality/time balance |
+| `quality` / `fine` | Smooth surface, fine details |
+| `strong` / `structural` | Maximum mechanical strength |
+| `vase` | Spiral vase mode |
+| `speed` | Everything maxed out |
 
-### Matériaux supportés
+### Supported Materials
 
-PLA, PETG, ABS, ASA, TPU, Nylon, PC — avec températures officielles Prusa, MVS Bible FDM, warnings séchage/enceinte.
+PLA, PETG, ABS, ASA, TPU, Nylon, PC — with official Prusa temperatures, Bible FDM MVS values, drying/enclosure warnings.
 
-## Base de connaissances
+## Knowledge Base
 
-Le moteur de recommandation s'appuie sur :
+The recommendation engine is built on:
 
-- **Bible de l'impression 3D FDM** — Guide complet orienté réglages PrusaSlicer
-- **Documentation officielle Prusa** — Températures, MVS, profils de référence
-- **Workflow de calibration** en 9 étapes (mécanique → PID → Z → EM → MVS → rétraction → cooling → PA → accel)
-- **Arbre de diagnostic** pour 9 défauts courants avec causes et corrections
+- **Bible de l'impression 3D FDM** — Comprehensive FDM settings guide for PrusaSlicer
+- **Official Prusa documentation** — Temperatures, MVS, reference profiles
+- **9-step calibration workflow** (mechanical → PID → Z → EM → MVS → retraction → cooling → PA → accel)
+- **Diagnostic tree** for 9 common defects with causes and fixes
 
-### MVS (Max Volumetric Speed) — Le paramètre central
+### MVS (Max Volumetric Speed) — The Central Parameter
 
-| Matériau | MVS (mm³/s) |
+| Material | MVS (mm³/s) |
 |----------|-------------|
 | PLA | ~15 |
 | ABS/ASA | ~11 |
@@ -138,21 +140,21 @@ Le moteur de recommandation s'appuie sur :
 
 ```
 src/
-├── index.ts              # Entry point MCP + STDIO transport
-├── types.ts              # Interfaces TypeScript
-├── config.ts             # Détection PrusaSlicer
-├── stl-parser.ts         # Parser STL binaire/ASCII natif
-├── threemf-parser.ts     # Parser 3MF (ZIP + XML)
-├── mesh-analyzer.ts      # Analyse géométrique
-├── profile-engine.ts     # Moteur de recommandation (Bible FDM)
-├── ini-writer.ts         # Génération .ini PrusaSlicer
-├── print-issues.ts       # Détection problèmes + diagnostic Bible FDM
-├── orientation.ts        # Suggestion d'orientation optimale
-├── cost-estimator.ts     # Estimation coût/temps
-├── filament-db.ts        # Base de données filaments
-├── prusa-cli.ts          # Wrapper CLI PrusaSlicer
-├── community-data.json   # Données communautaires (MVS, diagnostic, bonnes pratiques)
-└── tools/                # 17 tools MCP
+├── index.ts              # MCP entry point + STDIO transport
+├── types.ts              # TypeScript interfaces
+├── config.ts             # PrusaSlicer detection
+├── stl-parser.ts         # Native binary/ASCII STL parser
+├── threemf-parser.ts     # 3MF parser (ZIP + XML)
+├── mesh-analyzer.ts      # Geometric analysis
+├── profile-engine.ts     # Recommendation engine (Bible FDM)
+├── ini-writer.ts         # PrusaSlicer .ini generation
+├── print-issues.ts       # Issue detection + Bible FDM diagnostics
+├── orientation.ts        # Optimal orientation suggestion
+├── cost-estimator.ts     # Cost/time estimation
+├── filament-db.ts        # Filament database
+├── prusa-cli.ts          # PrusaSlicer CLI wrapper
+├── community-data.json   # Community data (MVS, diagnostics, best practices)
+└── tools/                # 17 MCP tools
     ├── analyze-mesh.ts
     ├── check-printability.ts
     ├── suggest-orientation.ts
@@ -170,12 +172,12 @@ src/
     └── feedback.ts
 ```
 
-## Prérequis
+## Requirements
 
 - **Node.js** >= 18
-- **PrusaSlicer** (optionnel — nécessaire uniquement pour slice, screenshot, get_current_model)
-- **Windows** pour le screenshot (utilise l'API PrintWindow)
+- **PrusaSlicer** (optional — only needed for slice, screenshot, get_current_model)
+- **Windows** for screenshot feature (uses PrintWindow API)
 
-## Licence
+## License
 
 MIT
