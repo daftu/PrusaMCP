@@ -1,0 +1,148 @@
+{
+  "version": "2.0.0",
+  "lastUpdated": "2026-02-23",
+  "contributors": 0,
+  "totalPrints": 0,
+  "source": "Bible de l'impression 3D FDM orientée réglages PrusaSlicer + Prusa official docs",
+  "insights": {
+    "materialTempAdjustments": {
+      "PLA": { "samples": 0, "avgNozzleTemp": 210, "avgBedTemp": 60, "firstLayerNozzleTemp": 215, "firstLayerBedTemp": 60, "notes": "Officiel Prusa: 215/210°C buse, 60°C bed. Fan élevé. MVS ~15 mm³/s." },
+      "PETG": { "samples": 0, "avgNozzleTemp": 240, "avgBedTemp": 85, "firstLayerNozzleTemp": 230, "firstLayerBedTemp": 90, "notes": "Officiel Prusa: 230/240°C buse, 85/90°C bed. Fan modéré. MVS ~8 mm³/s." },
+      "ABS": { "samples": 0, "avgNozzleTemp": 255, "avgBedTemp": 100, "firstLayerNozzleTemp": 255, "firstLayerBedTemp": 100, "notes": "Officiel Prusa: 255°C buse, 100°C bed (80-110). Enceinte obligatoire. MVS ~11 mm³/s." },
+      "ASA": { "samples": 0, "avgNozzleTemp": 260, "avgBedTemp": 105, "firstLayerNozzleTemp": 260, "firstLayerBedTemp": 110, "notes": "Officiel Prusa: 260°C buse, 105/110°C bed. Résistant UV. MVS ~11 mm³/s." },
+      "TPU": { "samples": 0, "avgNozzleTemp": 230, "avgBedTemp": 60, "firstLayerNozzleTemp": 230, "firstLayerBedTemp": 65, "notes": "Officiel Prusa: 220-240°C buse, 55-75°C bed. MVS ~1-2.5 mm³/s. Direct drive recommandé." },
+      "NYLON": { "samples": 0, "avgNozzleTemp": 285, "avgBedTemp": 110, "firstLayerNozzleTemp": 285, "firstLayerBedTemp": 110, "notes": "Officiel Prusa: 285°C buse, 110°C bed. Hygroscopique. Séchage 12h@80°C." },
+      "PC": { "samples": 0, "avgNozzleTemp": 275, "avgBedTemp": 110, "firstLayerNozzleTemp": 275, "firstLayerBedTemp": 115, "notes": "Officiel Prusa: 275°C buse, 110/115°C bed. Enceinte 50°C+. Risque arrachement sheet." },
+      "PVA": { "samples": 0, "avgNozzleTemp": 200, "avgBedTemp": 50, "notes": "Soluble. MVS ~4 mm³/s." },
+      "BVOH": { "samples": 0, "avgNozzleTemp": 200, "avgBedTemp": 50, "notes": "Soluble. MVS ~4 mm³/s." }
+    },
+    "maxVolumetricSpeed": {
+      "PLA": 15,
+      "PETG": 8,
+      "ABS": 11,
+      "ASA": 11,
+      "TPU": 2,
+      "NYLON": 8,
+      "PC": 8,
+      "PVA": 4,
+      "BVOH": 4
+    },
+    "commonIssuesByMaterial": {
+      "PLA": ["stringing", "elephants-foot"],
+      "PETG": ["stringing", "blobs", "oozing"],
+      "ABS": ["warping", "cracking", "delamination"],
+      "ASA": ["warping", "cracking"],
+      "TPU": ["stringing", "under-extrusion", "clogging"],
+      "NYLON": ["warping", "moisture-absorption", "poor-adhesion"],
+      "PC": ["warping", "delamination", "sheet-damage"]
+    },
+    "printerQuirks": {},
+    "bestPractices": [
+      { "condition": "material=ABS", "recommendation": "Enceinte fermée obligatoire. Priorité warping : enceinte > brim > temp plateau.", "confidence": 0.95 },
+      { "condition": "material=ASA", "recommendation": "Enceinte fermée + anti-courants d'air. Ajuster supports/overhang speed plutôt que fan.", "confidence": 0.93 },
+      { "condition": "material=PETG", "recommendation": "Rétraction max 0.8-1mm. MVS ~8 mm³/s. Surface Textured/Satin PEI recommandée.", "confidence": 0.90 },
+      { "condition": "material=TPU", "recommendation": "Vitesse cadrée via MVS (1-2.5 mm³/s). Direct drive recommandé. Smooth PEI déconseillé sans colle.", "confidence": 0.92 },
+      { "condition": "material=NYLON", "recommendation": "Séchage obligatoire (12h@80°C). PA Nylon sheet recommandée. Enceinte critique.", "confidence": 0.95 },
+      { "condition": "material=PC", "recommendation": "Enceinte 50°C+ requise. Couche séparation (colle) si Smooth PEI. Vérifier MVS et temp.", "confidence": 0.90 },
+      { "condition": "overhang>30%", "recommendation": "Supports nécessaires ou réorientation. Support Z contact = 50-75% hauteur couche.", "confidence": 0.88 },
+      { "condition": "height/width>3", "recommendation": "Brim 5mm+ pour stabilité. ABS/ASA : enceinte en priorité.", "confidence": 0.82 },
+      { "condition": "nozzle>=0.6", "recommendation": "Possible +10-20°C et MVS↑. Si capé par MVS : réduire layer height = 'détail gratuit'.", "confidence": 0.85 },
+      { "condition": "nozzle<=0.25", "recommendation": "Baisser MVS (résistance↑). Éviter <0.10mm layer (gain faible vs temps élevé). Supports plus fins.", "confidence": 0.80 },
+      { "condition": "defaut=stringing", "recommendation": "Ordre diagnostic : temp buse → EM/MVS → rétraction → humidité filament → nettoyage buse.", "confidence": 0.90 },
+      { "condition": "defaut=warping", "recommendation": "Ordre diagnostic : enceinte → temp bed → brim → surface propre (IPA/eau).", "confidence": 0.92 },
+      { "condition": "defaut=under-extrusion", "recommendation": "Ordre : cold pull/nettoyage buse → baisser MVS ou augmenter temp → calibrer EM.", "confidence": 0.88 },
+      { "condition": "defaut=layer-shift", "recommendation": "Vérifier tension courroies. Revoir accel/jerk (machine limits).", "confidence": 0.90 },
+      { "condition": "defaut=elephants-foot", "recommendation": "Ajuster Live Z / first layer. Activer Elephant Foot Compensation dans PrusaSlicer.", "confidence": 0.85 },
+      { "condition": "defaut=blobs", "recommendation": "Tester seam align/random. Calibrer PA/LA. Revalider EM.", "confidence": 0.82 }
+    ],
+    "speedLimits": {
+      "PLA": { "safe": 80, "fast": 120, "risky": 150 },
+      "PETG": { "safe": 60, "fast": 80, "risky": 100 },
+      "ABS": { "safe": 50, "fast": 70, "risky": 90 },
+      "ASA": { "safe": 50, "fast": 70, "risky": 90 },
+      "TPU": { "safe": 20, "fast": 25, "risky": 35 },
+      "NYLON": { "safe": 40, "fast": 60, "risky": 80 },
+      "PC": { "safe": 40, "fast": 60, "risky": 80 }
+    },
+    "calibrationWorkflow": {
+      "description": "Ordre officiel Prusa de calibration (Bible FDM). Chaque étape dépend de la précédente.",
+      "steps": [
+        { "order": 1, "name": "Base mécanique", "detail": "Tension courroies, axes, roulements. Cause classique de layer shift." },
+        { "order": 2, "name": "Stabilité thermique", "detail": "PID tuning si oscillations ±5°C. M303 pour autotune." },
+        { "order": 3, "name": "Première couche", "detail": "Live Adjust Z. Bed +5-10°C si adhésion limite. Surface propre (IPA/eau)." },
+        { "order": 4, "name": "Extrusion", "detail": "E-steps si changement extrudeur, sinon Extrusion Multiplier (calibration officielle Prusa)." },
+        { "order": 5, "name": "Débit (MVS)", "detail": "Max Volumetric Speed dans Filament Settings. PLA~15, PETG~8, ABS~11, TPU~1-2.5 mm³/s." },
+        { "order": 6, "name": "Rétraction / Wipe / Z-hop", "detail": "Printer Settings → Extruder. Max 2mm MK3, 3.2mm MINI bowden." },
+        { "order": 7, "name": "Cooling / Bridges / Overhangs", "detail": "Fan min/max, dynamic overhang speed. TPU : ajuster fan/overhang speed." },
+        { "order": 8, "name": "Pressure Advance (PA/LA)", "detail": "Advanced calibration. PA remplace LA depuis firmware 5.0.0 (M572). Dépend d'un débit correct." },
+        { "order": 9, "name": "Accélération / Jerk / Machine limits", "detail": "Trop haut = ringing/layer shift. Trop bas = temps long." }
+      ]
+    },
+    "nozzleSizeRules": {
+      "maxLayerHeightPercent": 80,
+      "minLayerHeightPercent": 25,
+      "autoExtrusionWidthMultiplier": 1.125,
+      "notes": "Règles officielles Prusa. Max layer height ≈ 80% buse. Auto extrusion width = 1.125 × buse. Plage utilisable = 25%-75% buse."
+    },
+    "defectDiagnosticTree": {
+      "description": "Arbre de diagnostic des défauts (Bible FDM)",
+      "branches": [
+        {
+          "defect": "under-extrusion",
+          "symptoms": ["Manques", "parois fines", "infill défait"],
+          "causes": ["Buse bouchée", "MVS trop haut", "temp trop basse", "EM mal calibré"],
+          "fixes": ["Cold pull/nettoyage", "Baisser MVS ou augmenter temp", "Calibrer EM"]
+        },
+        {
+          "defect": "over-extrusion",
+          "symptoms": ["Surépaisseurs", "blobs", "surface irrégulière"],
+          "causes": ["EM trop haut", "diamètre filament hors spec"],
+          "fixes": ["Calibrer EM (Prusa procedure)", "Vérifier tolérance filament"]
+        },
+        {
+          "defect": "stringing",
+          "symptoms": ["Cheveux", "fils entre pièces"],
+          "causes": ["Temp trop haute", "rétraction inadaptée", "humidité", "résidus buse"],
+          "fixes": ["Revenir preset officiel", "Ajuster rétraction (max 2mm MK3, 3.2 MINI)", "Sécher filament", "Nettoyer buse"]
+        },
+        {
+          "defect": "blobs-seams",
+          "symptoms": ["Zits aux jonctions"],
+          "causes": ["PA/LA mal réglé", "seam position", "sur-extrusion locale"],
+          "fixes": ["Tester seam align/random", "Calibrer PA/LA", "Revalider EM"]
+        },
+        {
+          "defect": "layer-shift",
+          "symptoms": ["Décalage XY"],
+          "causes": ["Courroies/tension", "accélérations trop hautes", "collisions"],
+          "fixes": ["Ajuster tension courroies", "Revoir accel/jerk (machine limits)"]
+        },
+        {
+          "defect": "warping",
+          "symptoms": ["Coins qui se lèvent"],
+          "causes": ["Temp/adhésion insuffisantes", "courants d'air", "matériaux techniques"],
+          "fixes": ["Enceinte si ABS/ASA/PC/Nylon", "Brim", "Temp bed adéquate", "Surface propre"]
+        },
+        {
+          "defect": "elephants-foot",
+          "symptoms": ["Base écrasée"],
+          "causes": ["1ère couche trop squish", "bed trop chaud"],
+          "fixes": ["Ajuster Live Z / first layer", "Elephant Foot Compensation PrusaSlicer"]
+        },
+        {
+          "defect": "delamination",
+          "symptoms": ["Couches qui se séparent"],
+          "causes": ["Temp trop basse", "fan trop fort sur ABS/ASA/PC", "enceinte absente"],
+          "fixes": ["Augmenter temp", "Réduire fan pour matériaux techniques", "Enceinte"]
+        },
+        {
+          "defect": "clogging",
+          "symptoms": ["Sous-extrusion progressive", "claquements extrudeur"],
+          "causes": ["Encrassement", "composite abrasif", "TPU mal guidé"],
+          "fixes": ["Cold pull / nettoyage", "Buse trempée pour composites", "Guidage TPU"]
+        }
+      ]
+    }
+  },
+  "aggregatedFeedback": []
+}

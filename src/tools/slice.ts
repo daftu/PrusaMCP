@@ -1,0 +1,163 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { existsSync } from "node:fs";
+import { dirname, basename, resolve, join } from "node:path";
+import { tmpdir } from "node:os";
+import { unlink } from "node:fs/promises";
+import type { PrusaConfig, MeshAnalysis } from "../types.js";
+import { runPrusaSlicer, parseGCodeStats } from "../prusa-cli.js";
+import { recommendProfile } from "../profile-engine.js";
+import { writeRawIniFile, profileToIniSettings } from "../ini-writer.js";
+import { parseStl } from "../stl-parser.js";
+import { analyzeMesh } from "../mesh-analyzer.js";
+
+export function registerSlice(server: McpServer, config: PrusaConfig) {
+  server.registerTool(
+    "slice_prusaslicer",
+    {
+      title: "Slicer un modèle 3D avec PrusaSlicer",
+      description:
+        "Slice un fichier STL/3MF avec PrusaSlicer CLI et retourne le G-code + statistiques. " +
+        "Peut utiliser un fichier .ini existant ou générer une config depuis une intention.",
+      inputSchema: {
+        stl_path: z.string().describe("Chemin absolu vers le fichier STL ou 3MF"),
+        config_path: z.string().optional().describe("Chemin vers un fichier .ini PrusaSlicer existant"),
+        output_gcode: z.string().optional().describe("Chemin de sortie pour le G-code"),
+        // Alternative: generate config from intent
+        goal: z.string().optional().describe("Si pas de config_path : intention pour générer un profil auto"),
+        printer: z.string().optional().describe("Nom de l'imprimante (pour génération auto)"),
+        nozzle: z.number().optional().describe("Diamètre de buse (pour génération auto)"),
+        material: z.string().optional().describe("Matériau (pour génération auto)"),
+      },
+    },
+    async ({ stl_path, config_path, output_gcode, goal, printer, nozzle, material }) => {
+      try {
+        if (!config.executablePath) {
+          return {
+            isError: true,
+            content: [{
+              type: "text" as const,
+              text: "PrusaSlicer non trouvé. Installe PrusaSlicer ou configure PRUSASLICER_PATH.",
+            }],
+          };
+        }
+
+        if (!existsSync(stl_path)) {
+          return {
+            isError: true,
+            content: [{ type: "text" as const, text: `Fichier non trouvé : ${stl_path}` }],
+          };
+        }
+
+        let iniPath = config_path;
+        let tempIni = false;
+
+        // If no config provided but goal is given, generate one
+        if (!iniPath && goal) {
+          console.error("[slice] Generating config from intent...");
+
+          let meshAnalysis: MeshAnalysis | undefined;
+          if (stl_path.toLowerCase().endsWith(".stl")) {
+            const stl = await parseStl(stl_path);
+            meshAnalysis = analyzeMesh(stl);
+          }
+
+          const profile = recommendProfile(
+            printer ?? "Generic",
+            nozzle ?? 0.4,
+            goal,
+            material ?? "PLA",
+            meshAnalysis,
+          );
+
+          const settings = profileToIniSettings(profile);
+          iniPath = join(tmpdir(), `prusaslicer-slice-${Date.now()}.ini`);
+          await writeRawIniFile(settings, iniPath);
+          tempIni = true;
+          console.error(`[slice] Generated config at: ${iniPath}`);
+        }
+
+        // Build CLI args
+        const args: string[] = ["--export-gcode"];
+
+        if (iniPath) {
+          args.push("--load", iniPath);
+        }
+
+        // Output path
+        const gcodePath =
+          output_gcode ??
+          resolve(
+            dirname(stl_path),
+            basename(stl_path).replace(/\.[^.]+$/, ".gcode"),
+          );
+        args.push("--output", gcodePath);
+        args.push(stl_path);
+
+        console.error(`[slice] Running: ${config.executablePath} ${args.join(" ")}`);
+        const result = await runPrusaSlicer(config, args);
+
+        // Cleanup temp ini
+        if (tempIni && iniPath) {
+          try { await unlink(iniPath); } catch { /* ignore */ }
+        }
+
+        // Check result
+        if (result.exitCode !== 0 && !existsSync(gcodePath)) {
+          return {
+            isError: true,
+            content: [{
+              type: "text" as const,
+              text: [
+                `Slicing échoué (exit code ${result.exitCode}) :`,
+                result.stderr || result.stdout,
+              ].join("\n"),
+            }],
+          };
+        }
+
+        // Parse G-code stats
+        let statsText = "";
+        if (existsSync(gcodePath)) {
+          try {
+            const stats = await parseGCodeStats(gcodePath);
+            statsText = [
+              stats.estimatedTime ? `**Temps estimé** : ${stats.estimatedTime}` : null,
+              stats.filamentUsedG ? `**Filament** : ${stats.filamentUsedG}g` : null,
+              stats.filamentUsedMm ? `**Longueur filament** : ${stats.filamentUsedMm}mm` : null,
+              stats.filamentCost != null ? `**Coût estimé** : ${stats.filamentCost}€` : null,
+              stats.layerCount ? `**Couches** : ${stats.layerCount}` : null,
+            ]
+              .filter(Boolean)
+              .join("\n");
+          } catch {
+            statsText = "(Impossible de parser les statistiques G-code)";
+          }
+        }
+
+        const lines = [
+          `## Slicing terminé`,
+          `**G-code** : ${gcodePath}`,
+          "",
+          statsText || "(Pas de statistiques disponibles)",
+        ];
+
+        if (result.stderr && !result.stderr.includes("Done")) {
+          lines.push("", "### Warnings", "```", result.stderr.trim(), "```");
+        }
+
+        return {
+          content: [{ type: "text" as const, text: lines.join("\n") }],
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [{
+            type: "text" as const,
+            text: `Erreur de slicing : ${error instanceof Error ? error.message : String(error)}`,
+          }],
+        };
+      }
+    },
+  );
+}
