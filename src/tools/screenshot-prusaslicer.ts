@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { execFile } from "node:child_process";
-import { readFile, unlink } from "node:fs/promises";
+import { captureMacWindow } from "../macos.js";
+import { readFile, rm, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { existsSync, writeFileSync, unlinkSync } from "node:fs";
@@ -96,14 +97,26 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
       description:
         "Prend un screenshot de la fenêtre PrusaSlicer (même en arrière-plan) " +
         "et retourne l'image. Le fichier temporaire est automatiquement supprimé après lecture.",
-      inputSchema: {},
+      inputSchema: {
+        window_id: z.number().int().positive().optional().describe("macOS window ID; required when multiple PrusaSlicer project windows are open"),
+      },
     },
-    async () => {
+    async ({ window_id }) => {
+      let directory: string | undefined;
       try {
-        const screenshotPath = join(tmpdir(), `prusa-screenshot-${Date.now()}.png`);
+        directory = await mkdtemp(join(tmpdir(), "prusa-screenshot-"));
+        const screenshotPath = join(directory, "window.png");
 
         console.error("[screenshot] Capturing PrusaSlicer window...");
-        const success = await capturePrusaSlicerWindow(screenshotPath);
+        let success: boolean;
+        if (process.platform === "darwin") {
+          await captureMacWindow(screenshotPath, window_id);
+          success = true;
+        } else if (process.platform === "win32") {
+          success = await capturePrusaSlicerWindow(screenshotPath);
+        } else {
+          throw new Error("Window capture is supported on macOS and Windows only.");
+        }
 
         if (!success || !existsSync(screenshotPath)) {
           return {
@@ -118,14 +131,6 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
         // Read the image as base64
         const imageBuffer = await readFile(screenshotPath);
         const base64 = imageBuffer.toString("base64");
-
-        // Cleanup — delete the screenshot file immediately
-        try {
-          await unlink(screenshotPath);
-          console.error("[screenshot] Temp file cleaned up.");
-        } catch {
-          console.error(`[screenshot] Warning: could not delete ${screenshotPath}`);
-        }
 
         return {
           content: [
@@ -148,6 +153,8 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
             text: `Erreur de capture : ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
+      } finally {
+        if (directory) await rm(directory, { recursive: true, force: true });
       }
     },
   );

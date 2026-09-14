@@ -9,6 +9,7 @@ import { registerAnalyzeMesh } from "./tools/analyze-mesh.js";
 import { registerRecommendProfile } from "./tools/recommend-profile.js";
 import { registerGenerateConfig } from "./tools/generate-config.js";
 import { registerSlice } from "./tools/slice.js";
+import { registerGuiFields } from "./tools/gui-fields.js";
 import { registerGetCurrentModel } from "./tools/get-current-model.js";
 import { registerScreenshotPrusaSlicer } from "./tools/screenshot-prusaslicer.js";
 import { registerCheckPrintability } from "./tools/check-printability.js";
@@ -57,11 +58,12 @@ async function main() {
   // PrusaSlicer integration
   registerSlice(server, config);
   registerGetCurrentModel(server, config);
+  registerGuiFields(server);
   registerScreenshotPrusaSlicer(server);
   registerPostprocessGcode(server);
   registerUploadPrint(server);
 
-  console.error("17 tools enregistrés. PrusaMCP v2.1.0 ready.");
+  console.error("20 tools enregistrés. PrusaMCP v2.1.0 ready.");
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

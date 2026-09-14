@@ -6,6 +6,7 @@ import { join, extname, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import type { PrusaConfig } from "../types.js";
+import { getMacWindow } from "../macos.js";
 import { parseStl } from "../stl-parser.js";
 import { analyzeMesh } from "../mesh-analyzer.js";
 
@@ -16,7 +17,9 @@ import { analyzeMesh } from "../mesh-analyzer.js";
  * The title shows the current file: "filename.stl - PrusaSlicer-2.9.x based on Slic3r"
  * Or "*Sans titre - PrusaSlicer..." if no file is saved.
  */
-function getPrusaSlicerWindowTitle(): Promise<string | null> {
+function getPrusaSlicerWindowTitle(windowId?: number): Promise<string | null> {
+  if (process.platform === "darwin") return getMacWindow(windowId).then(w => w.title);
+  if (process.platform !== "win32") throw new Error("Window detection is supported on macOS and Windows only.");
   return new Promise((resolve) => {
     execFile(
       "powershell",
@@ -44,7 +47,7 @@ function getPrusaSlicerWindowTitle(): Promise<string | null> {
  *   "*filename.stl - PrusaSlicer-2.9.4 basé sur Slic3r"  (modified)
  *   "*Sans titre - PrusaSlicer-2.9.4 basé sur Slic3r"    (untitled)
  */
-function extractFilenameFromTitle(title: string): string | null {
+export function extractFilenameFromTitle(title: string): string | null {
   // Remove the " - PrusaSlicer..." suffix
   const dashIndex = title.indexOf(" - PrusaSlicer");
   if (dashIndex === -1) return null;
@@ -80,6 +83,14 @@ async function findFileByName(
         if (entry.toLowerCase() === fileName.toLowerCase()) {
           return join(dir, entry);
         }
+      }
+      if (!extname(fileName)) {
+        const candidates = entries.filter(entry =>
+          [".3mf", ".stl", ".obj"].includes(extname(entry).toLowerCase()) &&
+          basename(entry, extname(entry)).toLowerCase() === fileName.toLowerCase());
+        if (candidates.length === 1) return join(dir, candidates[0]);
+        // Never guess between saved files with the same project stem.
+        if (candidates.length > 1) return null;
       }
     } catch {
       // skip unreadable dirs
@@ -165,15 +176,16 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
       description:
         "Détecte le fichier actuellement ouvert dans PrusaSlicer en lisant le titre de la fenêtre. " +
         "Retourne le chemin du fichier, les presets actifs (imprimante, filament, profil), " +
-        "et une analyse complète du mesh si c'est un STL.",
+        "et une analyse du STL enregistré. Les presets proviennent du disque, pas des modifications actives non enregistrées.",
       inputSchema: {
+        window_id: z.number().int().positive().optional().describe("macOS window ID; required when multiple PrusaSlicer project windows are open"),
         analyze: z
           .boolean()
           .default(true)
           .describe("Lancer l'analyse mesh automatiquement"),
       },
     },
-    async ({ analyze }) => {
+    async ({ analyze, window_id }) => {
       try {
         const lines: string[] = [];
 
@@ -189,7 +201,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
         }
 
         // 2. Get window title to find current file
-        const windowTitle = await getPrusaSlicerWindowTitle();
+        const windowTitle = await getPrusaSlicerWindowTitle(window_id);
 
         if (!windowTitle) {
           return {
@@ -202,6 +214,9 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
         }
 
         lines.push("## État PrusaSlicer");
+        lines.push(`**Fenêtre** : ${windowTitle}`);
+        lines.push("**Source des presets** : PrusaSlicer.ini enregistré sur disque; peut différer des réglages actifs. Les modifications non enregistrées et les overrides objet/modificateur ne sont pas lus.");
+        if (windowTitle.startsWith("*")) lines.push("**Attention** : le titre signale des modifications non enregistrées. Le fichier disque ne représente pas nécessairement le projet actuel.");
         lines.push(`**Imprimante** : ${state.currentPrinter || "non définie"}`);
         lines.push(`**Filament** : ${state.currentFilament || "non défini"}`);
         lines.push(`**Profil** : ${state.currentPrintProfile || "non défini"}`);
@@ -211,7 +226,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
         const fileName = extractFilenameFromTitle(windowTitle);
 
         if (!fileName) {
-          lines.push("**Modèle** : Aucun fichier ouvert (projet sans titre)");
+          lines.push("**Modèle** : Aucun nom de fichier détectable dans le titre; un projet non enregistré peut contenir des objets.");
           lines.push("");
           lines.push("_Charge un fichier STL/3MF dans PrusaSlicer pour que je puisse l'analyser._");
           return { content: [{ type: "text" as const, text: lines.join("\n") }] };
@@ -278,7 +293,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
         // 7. Other recent files in same directory
         const dir = state.skeinDirectory || join(filePath, "..");
         const recentModels = await findRecentModels(dir);
-        const others = recentModels.filter((m) => basename(m.path) !== fileName);
+        const others = recentModels.filter((m) => basename(m.path) !== basename(filePath));
         if (others.length > 0) {
           lines.push("## Autres fichiers dans le dossier");
           for (const m of others) {

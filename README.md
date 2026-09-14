@@ -78,12 +78,49 @@ Add to your MCP configuration:
 }
 ```
 
+### macOS
+
+The server detects `/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer`
+(and user Applications or Original Prusa Drivers installations) and reads profiles
+from `~/Library/Application Support/PrusaSlicer`. No `APPDATA` workaround is needed.
+
+```json
+{
+  "mcpServers": {
+    "prusa-mcp": {
+      "command": "node",
+      "args": ["/Users/dawidmos/repos/PrusaMCP/build/index.js"],
+      "env": {
+        "PRUSASLICER_PATH": "/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer"
+      }
+    }
+  }
+}
+```
+
+Use an absolute Node executable path if the MCP host cannot find `node`.
+Build with `npm run build` after updating the source, then restart the MCP server.
+
+Window detection uses macOS Quartz through the built-in `osascript` JavaScript
+bridge. Screenshots use `screencapture` for the selected window only. The MCP host
+needs Screen Recording access in System Settings > Privacy & Security and access
+to the logged-in graphical session. The server reports missing permission without
+changing permissions or prompting automatically. No Xcode or third-party runtime
+is required. Windows retains its PowerShell/PrintWindow implementation.
+
+If several PrusaSlicer projects are open, the tools return their titles and IDs;
+repeat the call with `window_id` to select one. They do not activate or modify it.
+`get_current_model` reads preset names from the **saved** `PrusaSlicer.ini` and
+analyzes the **saved** model file. It cannot export or read unsaved GUI settings or
+object/modifier overrides. A `*` in the window title is reported as unsaved changes.
+A title without a filename does not prove that the plate is empty.
+
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `PRUSASLICER_PATH` | Path to `prusa-slicer-console.exe` | Auto-detected |
-| `PRUSASLICER_PROFILES_DIR` | PrusaSlicer profiles folder | `%APPDATA%/PrusaSlicer` |
+| `PRUSASLICER_PATH` | Path to the PrusaSlicer executable | Auto-detected |
+| `PRUSASLICER_PROFILES_DIR` | PrusaSlicer profiles folder | macOS: `~/Library/Application Support/PrusaSlicer`; Windows: `%APPDATA%/PrusaSlicer` |
 | `OCTOPRINT_URL` | Your OctoPrint instance URL | — |
 | `OCTOPRINT_API_KEY` | OctoPrint API key | — |
 
@@ -176,8 +213,30 @@ src/
 
 - **Node.js** >= 18
 - **PrusaSlicer** (optional — only needed for slice, screenshot, get_current_model)
-- **Windows** for screenshot feature (uses PrintWindow API)
+- **macOS or Windows** for window detection and screenshots (macOS requires Screen Recording permission for the MCP host)
 
 ## License
 
 MIT
+
+## Structured macOS GUI access
+
+Prefer these tools to screenshots for parameter inspection:
+
+- `open_prusaslicer_tab`: navigate through named menu entries, then read fields.
+- `read_prusaslicer_fields`: return JSON with PrusaSlicer parameter names from
+  `AXHelp`, live values (including unsaved edits), enabled state, role and section.
+- `set_prusaslicer_field`: change one explicitly authorized numeric text field,
+  using its exact parameter name and an `expected_value` from a fresh read.
+  The tool commits through the UI, reports readback and never saves the project.
+
+These tools require Accessibility/Automation access for the MCP host in addition
+  to the existing window-detection permission. They do not grant permissions.
+Coverage is limited to currently exposed controls in the selected settings
+category and UI mode. Category navigation, custom-drawn dropdowns, object
+modifiers and hidden fields are not a complete API: do not infer their values
+from absent controls. Disabled fields can represent inheritance and are not
+necessarily effective settings. Numeric writes do not enable overrides or
+change checkboxes/dropdowns. A validation dialog or a normalized readback must
+be resolved by inspecting the result, not by assuming the requested value stuck.
+Screenshots remain available as a fallback for custom geometry and visual checks.

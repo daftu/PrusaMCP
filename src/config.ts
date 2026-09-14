@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import type { PrusaConfig } from "./types.js";
 
@@ -13,7 +14,17 @@ export function detectPrusaSlicerPath(): string | null {
   const envPath = process.env.PRUSASLICER_PATH;
   if (envPath && existsSync(envPath)) return envPath;
 
-  // 2. Default install locations
+  // 2. Platform-specific install locations
+  if (process.platform === "darwin") {
+    for (const app of ["/Applications/PrusaSlicer.app", join(homedir(), "Applications/PrusaSlicer.app"), "/Applications/Original Prusa Drivers/PrusaSlicer.app"]) {
+      const executable = join(app, "Contents/MacOS/PrusaSlicer");
+      if (existsSync(executable)) return executable;
+    }
+    return null;
+  }
+  if (process.platform !== "win32") return null;
+
+  // Windows install locations
   for (const p of DEFAULT_INSTALL_PATHS) {
     if (existsSync(p)) return p;
   }
@@ -34,6 +45,12 @@ export function detectPrusaSlicerPath(): string | null {
 }
 
 export function getProfilesDir(): string | null {
+  const override = process.env.PRUSASLICER_PROFILES_DIR;
+  if (override) return existsSync(override) ? override : null;
+  if (process.platform === "darwin") {
+    const dir = join(homedir(), "Library/Application Support/PrusaSlicer");
+    return existsSync(dir) ? dir : null;
+  }
   const appData = process.env.APPDATA;
   if (!appData) return null;
   const dir = join(appData, "PrusaSlicer");
