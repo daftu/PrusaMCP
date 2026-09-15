@@ -35,7 +35,7 @@ export const domains = {
     z.object({changed:z.literal(false),saved:z.literal(false),field}),
     z.object({editor_changed:z.literal(true).nullable(),saved:z.literal(false),parameter:s,verification:s,committed:z.null().optional(),message:s.optional(),requested:s.optional(),actual:scalar.nullable().optional()}),
   ]),
-  screenshot_prusaslicer:z.object({artifact:artifactRefSchema}),
+  screenshot_prusaslicer:z.object({image:z.object({media_type:z.literal("image/png"),content_index:z.literal(0)})}),
   postprocess_gcode:z.object({changed:b,inserted:n,skipped:n,output_path:s.optional()}),
   upload_print:z.object({http_status:n,file_name:s,server:s,start_requested:b,physical_state:z.literal("unknown")}),
   get_capabilities:capabilitiesSchema,

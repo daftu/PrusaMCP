@@ -90,7 +90,7 @@ function capturePrusaSlicerWindow(outputPath: string): Promise<boolean> {
   });
 }
 
-export function registerScreenshotPrusaSlicer(server: McpServer) {
+export function registerScreenshotPrusaSlicer(server: McpServer, captureWindow = captureMacWindow) {
   registerContractTool(server,
     "screenshot_prusaslicer",
     {
@@ -111,7 +111,7 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
         console.error("[screenshot] Capturing PrusaSlicer window...");
         let success: boolean;
         if (process.platform === "darwin") {
-          await captureMacWindow(screenshotPath, window_id);
+          await captureWindow(screenshotPath, window_id);
           success = true;
         } else if (process.platform === "win32") {
           success = await capturePrusaSlicerWindow(screenshotPath);
@@ -134,7 +134,7 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
         const base64 = imageBuffer.toString("base64");
 
         return {
-          data:{artifact:{path:screenshotPath,media_type:"image/png"}},
+          data:{image:{media_type:"image/png",content_index:0}},
           content: [
             {
               type: "image" as const,
