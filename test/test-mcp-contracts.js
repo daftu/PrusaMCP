@@ -70,7 +70,8 @@ test('STDIO tools/list exposes every output contract and read/write/failure call
   const call = async (name,args={}) => verify(name,await client.callTool({name,arguments:args}));
   const mesh = await call('analyze_mesh',{file_path:file});
   assert.equal(mesh.data.analysis.triangleCount,4); assert.equal(mesh.source,'file');
-  await call('recommend_profile',{goal:'standard'});
+  const missingSnapshot = await call('recommend_profile',{snapshot_id:'missing',goal:'standard',material_id:'PLA'});
+  assert.equal(missingSnapshot.status,'failed');
   await call('check_printability',{file_path:file});
   await call('suggest_orientation',{file_path:file});
   const cost = await call('estimate_cost',{file_path:file}); assert.equal(cost.data.estimates.length,4);

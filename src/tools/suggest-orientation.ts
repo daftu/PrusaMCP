@@ -2,7 +2,7 @@ import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { parseModel } from "./analyze-mesh.js";
+import { analyzeModel } from "../model-analysis.js";
 import { suggestOrientation } from "../orientation.js";
 
 export function registerSuggestOrientation(server: McpServer) {
@@ -28,7 +28,7 @@ export function registerSuggestOrientation(server: McpServer) {
         }
 
         console.error(`[suggest_orientation] Analyzing orientations for ${file_path}...`);
-        const mesh = await parseModel(file_path);
+        const {mesh, evidence} = await analyzeModel(file_path);
         const results = suggestOrientation(mesh);
 
         const lines: string[] = [
@@ -53,7 +53,9 @@ export function registerSuggestOrientation(server: McpServer) {
         }
 
         return {
-          data: {orientations:results},
+          resultStatus: evidence.coverage === "partial" ? "partial" : "confirmed",
+          warnings: evidence.warnings,
+          data: {evidence,orientations:results},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

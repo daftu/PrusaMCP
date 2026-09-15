@@ -24,7 +24,7 @@ PrusaMCP is not a simple CLI wrapper. It's a **3D printing assistant** that anal
 | `analyze_mesh` | Geometric analysis of STL/3MF (dimensions, volume, overhangs, manifold) |
 | `check_printability` | Issue detection: thin walls, bridges, overhangs, stability |
 | `suggest_orientation` | Test 6 orientations with scoring (overhangs, height, adhesion) |
-| `recommend_profile` | Full profile recommendation with per-setting justification |
+| `recommend_profile` | Estimated before/after changes to a resolved FFF configuration |
 | `generate_prusaslicer_config` | Generate PrusaSlicer-compatible .ini file |
 | `estimate_cost` | Cost estimate (filament + electricity) and print time |
 | `search_filament` | Search filament database (30+ entries) |
@@ -131,7 +131,7 @@ A title without a filename does not prove that the plate is empty.
 
 1. **Analyze a model**: `analyze_mesh` to get dimensions, overhangs, etc.
 2. **Check printability**: `check_printability` to detect potential issues
-3. **Get a recommendation**: `recommend_profile` with your goal (draft, standard, quality, strong, speed)
+3. **Get a recommendation**: resolve your configuration, then call `recommend_profile` with its `snapshot_id`, a goal (draft, standard, quality, strong, vase, speed), and `material_id`
 4. **Generate config**: `generate_prusaslicer_config` for a ready-to-use .ini
 5. **Slice**: `slice_prusaslicer` to generate G-code
 
@@ -490,3 +490,45 @@ unchanged entries from a synthetic cube project saved in stock PrusaSlicer
 2.9.6: ModelPart, NegativeVolume, ParameterModifier, overrides and variable
 layers. Thumbnail and global print configuration are excluded. Synthetic tests
 supply their own global overrides and opaque painting/SLA examples.
+
+### Saved-model analysis and profile deltas
+
+`recommend_profile(snapshot_id, goal, material_id, model_ref?)` uses an immutable
+configuration from `resolve_configuration`. `material_id` selects a documented
+heuristic rule set: `PLA`, `PETG`, `ABS`, `ASA`, `TPU`, `NYLON`, or `PC`; it is not
+a native material preset ID and does not replace the selected filament preset.
+Unknown goals and materials fail explicitly. `model_ref`, when supplied, is a
+saved STL or 3MF path. Missing or empty model geometry fails rather than being
+replaced by an invented analysis. This replaces the former standalone
+`recommend_profile(printer, nozzle, goal, material, stl_path?)` tool contract.
+
+The result contains `changes` with typed `address`, `before`, `after`, and `reason`,
+plus `snapshot_revision`, `confidence=heuristic`, `source=estimate`, and
+`applied=false`. Goals affect print parameters such as layers, perimeters, infill,
+print speeds and vase settings. Speeds start from the resolved profile and respect
+its volumetric limits; nozzle and layer limits come from that same profile.
+Machine start/end G-code, hardware settings, temperatures and profile limits are
+retained. A strong goal is a heuristic, not verified mechanical strength.
+
+No proposal is applied automatically. Map each change to `{address, value: after}`
+and call `validate_settings(snapshot_revision, changes)` for native validation.
+After a successful result, use an explicit configuration operation to resolve the
+validated serialized overrides against the same saved base and export a new file.
+This does not change the live GUI or generate G-code.
+
+Analysis, printability, orientation, recommendations, configuration generation,
+the wizard, cost estimates and auto-config slicing share saved-model analysis.
+For 3MF it includes all printable build instances, transforms and units, and only
+`ModelPart` triangles. `evidence` reports excluded roles and instance count.
+Negative volumes and modifiers are not evaluated with CSG: their presence gives
+`coverage=partial`, and `effective_volume=unknown`. `analysis.volume` is explicitly
+a source-mesh sum, never the final boolean-union volume or sliced material usage.
+No live unsaved project state is inferred.
+
+Overhang support, fine-detail, orientation, strength, time and cost suggestions
+are heuristics. Pre-slicing cost objects contain `source=estimate`; file geometry
+retains `source=file` with separate heuristic provenance. Generated INI files are
+artifacts containing estimated settings, not validated replacements for a printer
+profile. Auto-config slicing exposes its analysis as `auto_config_evidence`
+separately from CLI artifact/statistics. Existing `stl_path` inputs on generation
+and slicing also accept 3MF.

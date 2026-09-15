@@ -1,3 +1,5 @@
+import type { ConfigurationSnapshot } from "./config-resolver.js";
+import { deserializeSetting, getSettingCatalog, type SettingValue } from "./setting-catalog.js";
 import type {
   PrintGoal,
   MaterialProfile,
@@ -273,7 +275,8 @@ export function recommendProfile(
   const preset = GOALS[resolvedGoal];
 
   // Resolve material
-  const mat = MATERIALS[material.toUpperCase()] ?? MATERIALS["PLA"];
+  const mat = MATERIALS[material.toUpperCase()];
+  if (!mat) throw new Error("unknown_material: use PLA, PETG, ABS, ASA, TPU, NYLON or PC");
 
   // Nozzle specs (Bible FDM rules)
   const nozzleSpec = getNozzleSpec(nozzle);
@@ -590,7 +593,9 @@ export function recommendProfile(
 
 function resolveGoal(input: string): PrintGoal {
   const normalized = input.toLowerCase().trim();
-  return GOAL_ALIASES[normalized] ?? "standard";
+  const goal = Object.hasOwn(GOAL_ALIASES, normalized) ? GOAL_ALIASES[normalized] : undefined;
+  if (!goal) throw new Error("unknown_goal: use draft, standard, quality, strong, vase or speed");
+  return goal;
 }
 
 function clamp(val: number, min: number, max: number): number {
@@ -599,4 +604,53 @@ function clamp(val: number, min: number, max: number): number {
 
 function round2(val: number): number {
   return Math.round(val * 100) / 100;
+}
+
+/** Propose a narrow print-goal delta against an immutable native snapshot.
+ * Machine G-code, hardware settings and profile limits never enter the delta. */
+export function recommendProfileDelta(
+  snapshot: ConfigurationSnapshot, goal: string, materialId: string, analysis?: MeshAnalysis,
+) {
+  const resolvedGoal = resolveGoal(goal);
+  const material = MATERIALS[materialId.toUpperCase()];
+  if (!material) throw new Error("unknown_material: use PLA, PETG, ABS, ASA, TPU, NYLON or PC");
+  if (snapshot.technology !== "FFF") throw new Error("unsupported_technology: recommendation rules require FFF");
+  const nozzle = Math.min(...snapshot.settings.nozzle_diameter.split(",").map(Number));
+  const preset = GOALS[resolvedGoal];
+  const warnings = ["Estimate only: no toolpaths generated, no strength verified and no settings applied. Validate the proposed changes separately before writing a new configuration."];
+  if (!analysis) warnings.push("No model geometry supplied; support needs and small details are unknown.");
+  const layerLimits = (key: string) => (snapshot.settings[key] ?? "").split(",").map(Number).filter(n => n > 0);
+  const layer = clamp(round2(nozzle * preset.layerRatio), Math.max(nozzle * .25, ...layerLimits("min_layer_height")), Math.min(nozzle * .8, ...layerLimits("max_layer_height")));
+  const proposed: Record<string, SettingValue> = {
+    layer_height: layer, perimeters: preset.perimeters,
+    fill_density: `${preset.infill}%`, fill_pattern: preset.fillPattern,
+    spiral_vase: resolvedGoal === "vase",
+  };
+  if (resolvedGoal === "vase") { proposed.top_solid_layers = 0; proposed.support_material = false; }
+  else if (snapshot.settings.spiral_vase === "1") {
+    // Leaving vase requires a closed top again; keep the profile's nonzero count.
+    if (snapshot.settings.top_solid_layers === "0") proposed.top_solid_layers = 3;
+  }
+  if (analysis && resolvedGoal !== "vase") {
+    proposed.support_material = analysis.overhangPercent > 5;
+    if (analysis.hasSmallDetails && resolvedGoal === "quality") warnings.push("Small triangle heuristic suggests checking fine details in slicer preview; it does not measure wall thickness.");
+  }
+  const flowLimits = [snapshot.settings.max_volumetric_speed, snapshot.settings.filament_max_volumetric_speed]
+    .flatMap(value => (value ?? "").split(",").map(Number)).filter(n => n > 0);
+  const flow = Math.min(material.maxVolumetricSpeed, ...flowLimits);
+  for (const key of ["perimeter_speed", "external_perimeter_speed", "infill_speed", "solid_infill_speed", "top_solid_infill_speed"]) {
+    const current = Number(snapshot.settings[key]);
+    // Percentages and automatic speeds remain native expressions in the profile.
+    if (current > 0) proposed[key] = Math.min(Math.round(current * preset.speedMultiplier), Math.floor(flow / (layer * nozzle * 1.125)), ...(materialId.toUpperCase() === "TPU" ? [25] : []));
+  }
+  const catalog = getSettingCatalog(snapshot.version, snapshot.technology);
+  const changes = Object.entries(proposed).flatMap(([key, after]) => {
+    const raw = snapshot.settings[key];
+    if (raw === undefined) { warnings.push(`Setting ${key} is absent from the snapshot; no value was invented.`); return []; }
+    const before = deserializeSetting(catalog.find(definition => definition.key === key)!, raw);
+    return JSON.stringify(before) === JSON.stringify(after) ? [] : [{address: {scope: "global" as const, key}, before, after,
+      reason: `${resolvedGoal} goal using the resolved nozzle, current print speeds and unchanged profile flow/layer limits; ${materialId.toUpperCase()} heuristic.`}];
+  });
+  return {snapshot_id: snapshot.snapshot_id, snapshot_revision: snapshot.revision.sha256, goal: resolvedGoal, material_id: materialId.toUpperCase(),
+    changes, warnings, confidence: "heuristic" as const, source: "estimate" as const, applied: false as const};
 }

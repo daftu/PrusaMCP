@@ -18,8 +18,8 @@ test('realistic slice, live read, estimate and printer results use their domain 
       source: 'live_gui', coverage: 'currently_exposed_controls_only', window_id: 101,
       title: 'part - PrusaSlicer-2.9.6', fields: [{ parameter: 'layer_height', value: 0.2, enabled: true, role: 'AXTextField', section: 'Layers' }],
     }, { kind: 'live', session_id: 'window-101', observed_revision: 'observation-1' })],
-    ['estimate_cost', result('estimate', { estimates: [{ goal: 'standard', estimate: {
-      filamentWeightG: 20, filamentLengthMm: 6600, filamentCostEur: 0.5,
+    ['estimate_cost', result('estimate', { evidence: {source:'file',coverage:'complete',volume_basis:'source_mesh_sum',effective_volume:'unknown',heuristic_source:'estimate',printable_instances:1,excluded_roles:[],warnings:[]}, estimates: [{ goal: 'standard', estimate: {
+      source: 'estimate', filamentWeightG: 20, filamentLengthMm: 6600, filamentCostEur: 0.5,
       electricityCostEur: 0.2, totalCostEur: 0.7, printTimeSeconds: 3600, printTimeFormatted: '1h',
     } }] })],
     ['upload_print', result('printer', {

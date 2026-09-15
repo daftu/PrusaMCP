@@ -2,8 +2,7 @@ import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { parseModel } from "./analyze-mesh.js";
-import { analyzeMesh } from "../mesh-analyzer.js";
+import { analyzeModel } from "../model-analysis.js";
 import { detectPrintIssues } from "../print-issues.js";
 import { suggestOrientation } from "../orientation.js";
 import { recommendProfile } from "../profile-engine.js";
@@ -38,8 +37,7 @@ export function registerPrintWizard(server: McpServer) {
         }
 
         console.error(`[print_wizard] Full analysis of ${file_path}...`);
-        const mesh = await parseModel(file_path);
-        const analysis = analyzeMesh(mesh);
+        const {mesh, analysis, evidence} = await analyzeModel(file_path);
         const issues = detectPrintIssues(mesh.triangles, analysis, nozzle ?? 0.4);
         const orientations = suggestOrientation(mesh);
         const bestOrientation = orientations[0];
@@ -50,7 +48,7 @@ export function registerPrintWizard(server: McpServer) {
         // ─── Section 1: Analyse mesh ──────────────────
         lines.push("## 1. Analyse du modèle");
         lines.push(`- **Dimensions** : ${bb.size.x.toFixed(1)} × ${bb.size.y.toFixed(1)} × ${bb.size.z.toFixed(1)} mm`);
-        lines.push(`- **Volume** : ${(analysis.volume / 1000).toFixed(2)} cm³`);
+        lines.push(`- **Source mesh volume (not sliced consumption)** : ${(analysis.volume / 1000).toFixed(2)} cm³`);
         lines.push(`- **Triangles** : ${analysis.triangleCount.toLocaleString()}`);
         lines.push(`- **Manifold** : ${analysis.isManifold ? "OK" : "NON — repair nécessaire"}`);
         lines.push("");
@@ -183,7 +181,9 @@ export function registerPrintWizard(server: McpServer) {
         }
 
         return {
-          data: {analysis,report:issues,orientations,profile:wizardProfile,cost:wizardCost,questions},
+          resultStatus: evidence.coverage === "partial" ? "partial" : "confirmed",
+          warnings: evidence.warnings,
+          data: {evidence,analysis,report:issues,orientations,profile:wizardProfile,cost:wizardCost,questions},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {
