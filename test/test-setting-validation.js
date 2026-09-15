@@ -55,3 +55,12 @@ test('revision, global scope, native bounds and script policy are enforced',()=>
   assert.equal(validateSettingChanges(snapshot,revision,[change('post_process',['echo unsafe'])]).errors[0].code,'script_policy');
   assert.equal(validateSettingChanges(snapshot,revision,[{address:{scope:'object',target_id:'x',key:'layer_height'},value:0.2}]).errors[0].code,'unsupported_scope');
 });
+
+test('typed validation accepts native bed-temperature and cooling-move values',async()=>{
+  const one={...snapshot,extruder_count:1,settings:{...snapshot.settings,nozzle_diameter:'0.4'}};
+  let nativeOverrides;
+  const service={getSnapshot:()=>one,validateNative:async(_snapshot,overrides)=>{nativeOverrides=overrides;}};
+  const result=await validateSettings(service,revision,[change('first_layer_bed_temperature',[60]),change('filament_cooling_moves',[4])]);
+  assert.equal(result.valid,true);assert.equal(result.native_validated,true);
+  assert.deepEqual(nativeOverrides,{first_layer_bed_temperature:'60',filament_cooling_moves:'4'});
+});

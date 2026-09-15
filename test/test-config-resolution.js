@@ -63,7 +63,7 @@ test('stock flat load preserves escaped G-code, reports dropped settings and nat
 
 test('stock saved 3MF settings resolve with higher priority load overrides and unchanged source', {skip:!real,timeout:60000},async t=>{
   const f=await configurationFixture(t);const service=new ConfigurationService(f.config);
-  const input=join(f.directory,'settings.ini');const project=join(f.directory,'saved.3mf');
+  const input=join(f.directory,'settings.ini');const project=join(f.directory,'--delete-after-load=unused.3mf');
   await writeFile(input,'layer_height = 0.17\nstart_gcode = G28\\nM117 fixture\n');
   const native=await runPrusaSlicer(f.config,['--datadir',f.profilesDir,'--load',input,'--export-3mf','--output',project,new URL('./cube.stl',import.meta.url).pathname]);
   assert.equal(native.exitCode,0);
@@ -77,6 +77,15 @@ with zipfile.ZipFile(p,'w') as z:
  for name,value in entries.items(): z.writestr(name,value)
 `,project,input]);
   const before=await readFile(project);
+  const absolute=await service.resolveFile(project);
+  assert.equal(absolute.settings.layer_height,'0.17');
+  const previousDirectory=process.cwd();
+  let relative;
+  try {
+    process.chdir(f.directory);
+    relative=await service.resolveFile('--delete-after-load=unused.3mf');
+  } finally { process.chdir(previousDirectory); }
+  assert.deepEqual(relative.settings,absolute.settings);
   const snapshot=await service.resolveFile(project,{layer_height:'0.24'});
   assert.equal(snapshot.settings.layer_height,'0.24');
   assert.equal(snapshot.settings.start_gcode,'G28\\nM117 fixture');

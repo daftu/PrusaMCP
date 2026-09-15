@@ -1,6 +1,7 @@
 // Type/range facts from PrusaSlicer version_2.9.6 PrintConfig.cpp, restricted
 // to keys advertised by the installed stock 2.9.6 --help-fff/--help-sla.
 // Source: https://github.com/prusa3d/PrusaSlicer/blob/version_2.9.6/src/libslic3r/PrintConfig.cpp
+// Bounds reflect the final assignment in each native definition (including overwritten initial values).
 // Complex point and dynamically generated options are not inferred.
 import type { SettingDefinition } from "./setting-catalog.js";
 export const definitions296: Record<string, SettingDefinition> = {
@@ -80,7 +81,7 @@ export const definitions296: Record<string, SettingDefinition> = {
   "filament_toolchange_delay": {"type":"float","technologies":["FFF"],"vector":true,"min":0.0},
   "filament_stamping_loading_speed": {"type":"float","technologies":["FFF"],"vector":true,"min":0.0},
   "filament_stamping_distance": {"type":"float","technologies":["FFF"],"vector":true,"min":0.0},
-  "filament_cooling_moves": {"type":"int","technologies":["FFF"],"vector":true,"max":0.0},
+  "filament_cooling_moves": {"type":"int","technologies":["FFF"],"vector":true,"max":20.0},
   "filament_cooling_initial_speed": {"type":"float","technologies":["FFF"],"vector":true,"min":0.0},
   "filament_minimal_purge_on_wipe_tower": {"type":"float","technologies":["FFF"],"vector":true,"min":0.0},
   "filament_cooling_final_speed": {"type":"float","technologies":["FFF"],"vector":true,"min":0.0},
@@ -107,7 +108,7 @@ export const definitions296: Record<string, SettingDefinition> = {
   "fill_pattern": {"type":"enum","technologies":["FFF"],"values":["rectilinear","monotonic","monotoniclines","alignedrectilinear","grid","triangles","stars","cubic","line","concentric","honeycomb","3dhoneycomb","gyroid","hilbertcurve","archimedeanchords","octagramspiral","adaptivecubic","supportcubic","lightning","zigzag"]},
   "first_layer_acceleration": {"type":"float","technologies":["FFF"],"min":0.0},
   "first_layer_acceleration_over_raft": {"type":"float","technologies":["FFF"],"min":0.0},
-  "first_layer_bed_temperature": {"type":"int","technologies":["FFF"],"vector":true,"extruder_indexed":true,"max":0.0},
+  "first_layer_bed_temperature": {"type":"int","technologies":["FFF"],"vector":true,"extruder_indexed":true,"max":300.0},
   "first_layer_extrusion_width": {"type":"float_or_percent","technologies":["FFF"],"min":0.0},
   "first_layer_height": {"type":"float_or_percent","technologies":["FFF"],"min":0.0},
   "first_layer_speed": {"type":"float_or_percent","technologies":["FFF"],"min":0.0},

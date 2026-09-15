@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, extname } from "node:path";
+import { join, extname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { detectCliCapabilities } from "./capabilities.js";
 import { fileRevision } from "./contracts.js";
@@ -66,7 +66,8 @@ export class ConfigurationService {
         if (parsed.format !== "flat_ini") throw new Error("bundle_requires_import: import preset bundles before resolving their selected presets");
         original = parsed.settings;
       }
-      const args = isProject ? [path] : ["--load", path];
+      const inputPath = resolve(path);
+      const args = isProject ? [inputPath] : ["--load", inputPath];
       if (Object.keys(overrides).length) {
         const safe = omitPrivateSettings(overrides);
         if (safe.omitted_fields.length) throw new Error("protected_setting: host secrets and post_process cannot be configuration overrides");
