@@ -59,7 +59,7 @@ test('STDIO tools/list exposes every output contract and read/write/failure call
   const client = new Client({name:'contract-tests',version:'1'});
   await client.connect(transport); t.after(() => client.close());
   const list = await client.listTools();
-  assert.deepEqual(list.tools.map(t=>t.name).sort(),Object.keys(domains).sort());
+  assert.deepEqual(list.tools.map(t=>t.name).sort(),[...Object.keys(domains),'list_printer_models','list_presets','resolve_configuration','validate_settings','import_configuration','export_configuration'].sort());
   for (const tool of list.tools) {
     assert.equal(tool.outputSchema.type,'object', tool.name);
     assert.equal(typeof tool.annotations.readOnlyHint,'boolean',tool.name);

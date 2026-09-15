@@ -1,7 +1,7 @@
 {
   "name": "prusa-mcp",
   "version": "1.0.0",
-  "description": "MCP server intelligent pour PrusaSlicer — analyse mesh, recommandation de profils, slicing",
+  "description": "MCP server intelligent pour PrusaSlicer \u2014 analyse mesh, recommandation de profils, slicing",
   "type": "module",
   "bin": {
     "prusa-mcp": "./build/index.js"
@@ -12,7 +12,8 @@
     "dev": "tsc --watch"
   },
   "files": [
-    "build"
+    "build",
+    "native"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

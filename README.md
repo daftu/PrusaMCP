@@ -322,3 +322,112 @@ contents, while live revisions identify an observed session revision rather than
 a full project snapshot. Setting addresses use zero-based extruder indices and
 require a target for object, volume and height-range scopes. Unknown effective
 settings carry `effective_known: false` and `effective_value: null`.
+
+## Native presets and configuration (PrusaSlicer 2.9.6)
+
+The configuration tools use stock PrusaSlicer CLI and an optional native preset helper, both with isolated data directories.
+They do not change the active GUI project, run slicing, or install presets in the
+user's profile directory. Set `PRUSASLICER_PATH` and, for installed preset queries,
+`PRUSASLICER_PROFILES_DIR` as described above.
+
+| Tool | Behavior |
+| --- | --- |
+| `list_printer_models` | Lists installed FFF or SLA models and printer preset IDs. |
+| `list_presets` | Lists compatible print/material IDs for a returned printer ID. |
+| `resolve_configuration` | Resolves one saved INI/3MF or a complete preset tuple, with optional overrides. |
+| `validate_settings` | Checks typed global edits against a snapshot revision and then native validation; does not apply edits. An empty changes list returns the catalog and validates the snapshot. |
+| `import_configuration` | Imports a flat INI or native preset bundle in a server-managed workspace. |
+| `export_configuration` | Writes a flat INI snapshot or its selected native preset bundle; existing files are never replaced. |
+
+For example, resolve a saved configuration:
+
+```json
+{
+  "base": { "type": "file", "path": "/work/input.ini" },
+  "overrides": { "layer_height": "0.2" }
+}
+```
+
+Alternatively, use `base.type = "presets"` with `printer_profile_id`,
+`print_profile_id`, and `material_profile_ids` returned by the listing tools.
+The tuple must provide one compatible material per FFF extruder, or one SLA
+material. Ambiguous native preset names are rejected. System print/material IDs use the verified vendor file identity. A missing
+or ambiguous system vendor source is rejected. User presets retain
+`vendor_id = null` when their vendor is unknown.
+
+Use the returned `revision.sha256` as `snapshot_revision` for `validate_settings`:
+
+```json
+{
+  "snapshot_revision": "<sha256 from resolve_configuration>",
+  "changes": [
+    { "address": { "scope": "global", "key": "fill_density" }, "value": "25%" },
+    { "address": { "scope": "global", "key": "temperature", "extruder_index": 0 }, "value": 215 }
+  ]
+}
+```
+
+Booleans use JSON booleans, integers/floats use numbers, percentages use strings
+such as `"25%"`, enums use native names, and vectors use arrays. Extruder indexes
+start at zero. The catalog covers modeled keys advertised by stock 2.9.6 help;
+complex point types and unmodeled keys are explicitly unsupported. GUI locations
+are null unless confirmed in that version's source. Layer-event information
+reports the firmware and commands present in native configuration; it does not
+certify physical behavior.
+
+`resolve_configuration.overrides` contains native serialized INI values, with
+escaped newlines for G-code text. Native precedence is CLI options above `--load`
+files, above the selected preset tuple or 3MF configuration. The resolver puts
+explicit overrides in a later `--load` layer. Configuration results include
+omitted, unsupported, and converted field names. `input_diagnostics_known=false`
+means source conversion details are unavailable; an empty list then does not
+prove that no conversion occurred. These snapshots describe saved/effective
+configuration, not unsaved GUI state. Snapshot and workspace IDs belong to the
+running MCP server session.
+
+### Named preset bundles
+
+Build the [native preset helper](native/README.md) from the pinned PrusaSlicer
+2.9.6 source and set `PRUSAMCP_NATIVE_CONFIG_PATH` to its executable. It calls
+PrusaSlicer's own preset loader, compatibility checks and exporter. Stock CLI
+alone has no bundle import action. A missing helper reports
+`native_backend_missing`; flat INI and saved-project operations remain available.
+
+1. Call `import_configuration` with `path` and `workspace_id`. A bundle import
+   returns separate profile IDs, including profiles with the same name in
+   different categories. It does not select a default tuple or return a snapshot.
+2. Choose the printer, print and material IDs from that response and pass them
+   to `resolve_configuration` with `base.type = "presets"`. All IDs must belong
+   to the same imported bundle. Compatibility is checked by the native helper
+   during resolution; empty compatibility arrays on imported IDs are not a verdict.
+3. Pass the resolved `snapshot_id` to `export_configuration` with
+   `format = "bundle"` and a new `output_path`.
+
+With the helper configured, installed preset tuples can also be exported. The
+snapshot retains a native flattened bundle of the selected presets, so later
+profile edits cannot change its export. Overrides may produce native generated
+material names to preserve separate values for each extruder; printer and print
+names remain unchanged so name-based compatibility conditions still apply. A snapshot from a
+flat file has no selected preset set and cannot be exported as a bundle.
+
+Native preset bundles omit project fields such as color-change heights and purge
+volume matrices. Bundle export names these fields in `omitted_fields` and
+`bundle_omitted_fields`, and reports `partial` with a warning. The source snapshot
+and flat INI retain their values; use flat INI when transferring project settings.
+
+The helper runs in a separate process and uses no GUI or private application ABI.
+Its sources and pinned build instructions are included; no prebuilt helper is
+bundled with the npm package. See its AGPL-3.0-or-later notices before distributing
+a compiled helper.
+
+Host connection secrets and executable `post_process` scripts are omitted from
+configuration results and exports; omissions list field names only. Custom
+printer G-code text is preserved. Executable post-processing remains governed
+by the existing trusted-script policy.
+
+The versioned type facts come from stock CLI help and the official
+[PrintConfig definitions](https://github.com/prusa3d/PrusaSlicer/blob/version_2.9.6/src/libslic3r/PrintConfig.cpp).
+String serialization follows the native
+[Config implementation](https://github.com/prusa3d/PrusaSlicer/blob/version_2.9.6/src/libslic3r/Config.cpp),
+and confirmed GUI category mappings come from
+[Tab.cpp](https://github.com/prusa3d/PrusaSlicer/blob/version_2.9.6/src/slic3r/GUI/Tab.cpp).
