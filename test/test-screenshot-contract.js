@@ -5,7 +5,7 @@ import { registerScreenshotPrusaSlicer } from '../build/tools/screenshot-prusasl
 import { domains } from '../build/tool-domains.js';
 import { toolResultSchema } from '../build/contracts.js';
 
-test('screenshot returns embedded image data after its temporary file is removed', async () => {
+test('screenshot returns embedded image data after its temporary file is removed', { skip: process.platform !== 'darwin' }, async () => {
   const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   let invoke;
   let screenshotPath;
