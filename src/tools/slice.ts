@@ -5,12 +5,11 @@ import { existsSync } from "node:fs";
 import { dirname, basename, resolve, join } from "node:path";
 import { stat } from "node:fs/promises";
 import { assertOutputAvailable, createArtifactStage, publishArtifact, removeArtifactStage } from "../artifacts.js";
-import type { PrusaConfig, MeshAnalysis } from "../types.js";
+import type { PrusaConfig } from "../types.js";
 import { runPrusaSlicer, parseGCodeStats } from "../prusa-cli.js";
 import { recommendProfile } from "../profile-engine.js";
 import { writeRawIniFile, profileToIniSettings } from "../ini-writer.js";
-import { parseStl } from "../stl-parser.js";
-import { analyzeMesh } from "../mesh-analyzer.js";
+import { analyzeModel } from "../model-analysis.js";
 
 export function registerSlice(server: McpServer, config: PrusaConfig, runner = runPrusaSlicer) {
   registerContractTool(server,
@@ -50,22 +49,21 @@ export function registerSlice(server: McpServer, config: PrusaConfig, runner = r
         await assertOutputAvailable(gcodePath);
         stage = await createArtifactStage(gcodePath);
         let iniPath = config_path;
+        let model: Awaited<ReturnType<typeof analyzeModel>> | undefined;
 
         // If no config provided but goal is given, generate one
         if (!iniPath && goal) {
+          if (!material) throw new Error("material_required: Matériau requis pour générer une config automatique.");
           console.error("[slice] Generating config from intent...");
 
-          let meshAnalysis: MeshAnalysis | undefined;
-          if (stl_path.toLowerCase().endsWith(".stl")) {
-            const stl = await parseStl(stl_path);
-            meshAnalysis = analyzeMesh(stl);
-          }
+          model = await analyzeModel(stl_path);
+          const meshAnalysis = model.analysis;
 
           const profile = recommendProfile(
             printer ?? "Generic",
             nozzle ?? 0.4,
             goal,
-            material ?? "PLA",
+            material,
             meshAnalysis,
           );
 
@@ -135,7 +133,8 @@ export function registerSlice(server: McpServer, config: PrusaConfig, runner = r
         }
 
         return {
-          data: {artifact:{path:gcodePath,media_type:"text/x.gcode"},exit_code:0,stats,post_process_policy:policy},
+          warnings: model?.evidence.warnings ?? [],
+          data: {auto_config_evidence:model?.evidence,artifact:{path:gcodePath,media_type:"text/x.gcode"},exit_code:0,stats,post_process_policy:policy},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

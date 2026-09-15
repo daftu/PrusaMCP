@@ -50,7 +50,8 @@ async function main() {
   registerAnalyzeMesh(server);
   registerCheckPrintability(server);
   registerSuggestOrientation(server);
-  registerRecommendProfile(server);
+  const configurations = new ConfigurationService(config);
+  registerRecommendProfile(server, configurations);
   registerGenerateConfig(server);
   registerEstimateCost(server);
   registerSearchFilament(server);
@@ -70,7 +71,6 @@ async function main() {
   registerPostprocessGcode(server);
   registerUploadPrint(server);
   registerCapabilities(server, config);
-  const configurations = new ConfigurationService(config);
   registerProfileTools(server, configurations);
   registerProjectTools(server, configurations);
   registerValidateSettings(server, configurations);

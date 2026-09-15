@@ -2,8 +2,7 @@ import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { parseModel } from "./analyze-mesh.js";
-import { analyzeMesh } from "../mesh-analyzer.js";
+import { analyzeModel } from "../model-analysis.js";
 import { estimateCostFromMesh } from "../cost-estimator.js";
 import { recommendProfile } from "../profile-engine.js";
 
@@ -36,8 +35,7 @@ export function registerEstimateCost(server: McpServer) {
           };
         }
 
-        const mesh = await parseModel(file_path);
-        const analysis = analyzeMesh(mesh);
+        const {mesh, analysis, evidence} = await analyzeModel(file_path);
 
         const params = {
           filamentPricePerKg: filament_price_per_kg,
@@ -121,7 +119,9 @@ export function registerEstimateCost(server: McpServer) {
         }
 
         return {
-          data: {estimates},
+          resultStatus: evidence.coverage === "partial" ? "partial" : "confirmed",
+          warnings: evidence.warnings,
+          data: {evidence,estimates},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

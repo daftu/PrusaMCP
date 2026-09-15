@@ -3,12 +3,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { existsSync } from "node:fs";
 import { recommendProfile } from "../profile-engine.js";
-import { writeIniFile, writeRawIniFile, profileToIniSettings, serializeIni } from "../ini-writer.js";
-import { parseStl } from "../stl-parser.js";
-import { analyzeMesh } from "../mesh-analyzer.js";
-import type { PrusaSlicerSettings, MeshAnalysis } from "../types.js";
+import { writeRawIniFile, profileToIniSettings, serializeIni } from "../ini-writer.js";
+import { analyzeModel } from "../model-analysis.js";
 
 export function registerGenerateConfig(server: McpServer) {
   registerContractTool(server,
@@ -22,8 +19,8 @@ export function registerGenerateConfig(server: McpServer) {
         printer: z.string().default("Generic").describe("Nom de l'imprimante"),
         nozzle: z.number().default(0.4).describe("Diamètre de buse en mm"),
         goal: z.string().describe("Intention d'impression"),
-        material: z.string().default("PLA").describe("Matériau"),
-        stl_path: z.string().optional().describe("Chemin STL pour analyse auto"),
+        material: z.string().describe("Matériau"),
+        stl_path: z.string().optional().describe("Chemin STL ou 3MF pour analyse auto"),
         output_path: z.string().optional().describe("Chemin de sortie pour le .ini (sinon fichier temporaire)"),
         custom_settings: z
           .record(z.string(), z.union([z.string(), z.number()]))
@@ -33,12 +30,8 @@ export function registerGenerateConfig(server: McpServer) {
     },
     async ({ printer, nozzle, goal, material, stl_path, output_path, custom_settings }) => {
       try {
-        // Mesh analysis if STL provided
-        let meshAnalysis: MeshAnalysis | undefined;
-        if (stl_path && existsSync(stl_path)) {
-          const stl = await parseStl(stl_path);
-          meshAnalysis = analyzeMesh(stl);
-        }
+        const model = stl_path ? await analyzeModel(stl_path) : undefined;
+        const meshAnalysis = model?.analysis;
 
         // Generate recommendation
         const profile = recommendProfile(printer, nozzle, goal, material, meshAnalysis);
@@ -83,7 +76,9 @@ export function registerGenerateConfig(server: McpServer) {
         ];
 
         return {
-          data: {artifact:{path:finalPath,media_type:"text/plain"},settings,ini:iniContent},
+          warnings: model?.evidence.warnings ?? ["Generated settings are estimates; no resolved printer profile or toolpaths were validated."],
+          resultStatus: model?.evidence.coverage === "partial" ? "partial" : "confirmed",
+          data: {evidence:model?.evidence,artifact:{path:finalPath,media_type:"text/plain"},settings,ini:iniContent},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

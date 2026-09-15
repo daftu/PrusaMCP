@@ -70,7 +70,8 @@ test('STDIO tools/list exposes every output contract and read/write/failure call
   const call = async (name,args={}) => verify(name,await client.callTool({name,arguments:args}));
   const mesh = await call('analyze_mesh',{file_path:file});
   assert.equal(mesh.data.analysis.triangleCount,4); assert.equal(mesh.source,'file');
-  await call('recommend_profile',{goal:'standard'});
+  const missingSnapshot = await call('recommend_profile',{snapshot_id:'missing',goal:'standard',material_id:'PLA'});
+  assert.equal(missingSnapshot.status,'failed');
   await call('check_printability',{file_path:file});
   await call('suggest_orientation',{file_path:file});
   const cost = await call('estimate_cost',{file_path:file}); assert.equal(cost.data.estimates.length,4);
@@ -88,7 +89,7 @@ test('STDIO tools/list exposes every output contract and read/write/failure call
   assert.equal(storedFeedback[0].modelName,'synthetic tetra');
   assert.equal((await call('feedback_stats')).data.stats.totalPrints,1);
   const exported = await call('export_feedback'); assert.equal(exported.data.print_count,1); assert.equal(exported.data.feedbacks[0].material,'PLA');
-  const config = await call('generate_prusaslicer_config',{goal:'standard',output_path:join(dir,'result.ini')});
+  const config = await call('generate_prusaslicer_config',{goal:'standard',material:'PLA',output_path:join(dir,'result.ini')});
   assert.match(await readFile(config.data.artifact.path,'utf8'), /layer_height/);
   const partial = await call('postprocess_gcode',{gcode_path:gcode,actions:[{layer:1,type:'pause'},{layer:99,type:'pause'}]});
   assert.equal(partial.status,'partial'); assert.equal(partial.data.inserted,1);

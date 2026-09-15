@@ -2,8 +2,7 @@ import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { parseModel } from "./analyze-mesh.js";
-import { analyzeMesh } from "../mesh-analyzer.js";
+import { analyzeModel } from "../model-analysis.js";
 import { detectPrintIssues } from "../print-issues.js";
 
 export function registerCheckPrintability(server: McpServer) {
@@ -33,8 +32,7 @@ export function registerCheckPrintability(server: McpServer) {
         }
 
         console.error(`[check_printability] Analyzing ${file_path}...`);
-        const mesh = await parseModel(file_path);
-        const analysis = analyzeMesh(mesh);
+        const {mesh, analysis, evidence} = await analyzeModel(file_path);
         const report = detectPrintIssues(mesh.triangles, analysis, nozzle_diameter);
 
         const lines: string[] = [
@@ -97,7 +95,9 @@ export function registerCheckPrintability(server: McpServer) {
         }
 
         return {
-          data: {report},
+          resultStatus: evidence.coverage === "partial" ? "partial" : "confirmed",
+          warnings: evidence.warnings,
+          data: {evidence,report},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

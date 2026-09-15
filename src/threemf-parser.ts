@@ -4,17 +4,21 @@ import { metadataFromArchive } from "./project-metadata.js";
 import type { Triangle, Vec3, StlData } from "./types.js";
 /** Flatten only printable build instances and native ModelPart volumes, in millimeters.
  * This is source mesh analysis; negative-volume CSG and overlap union are not evaluated. */
-export async function parse3mf(filePath: string): Promise<StlData> {
+export async function read3mfAnalysisInput(filePath: string) {
   const archive = await readArchive(filePath);
   const { scene } = sceneFromArchive(archive);
   const metadata = metadataFromArchive(archive);
   const triangles: Triangle[] = [];
-  for (const instance of scene.instances.filter((i) => i.printable))
+  const excludedRoles = new Set<string>();
+  let printableInstances = 0;
+  for (const instance of scene.instances.filter((i) => i.printable)) {
+    printableInstances++;
     for (const mesh of instance.meshes) {
       const obj = scene.objects.find((o) => o.object_id === mesh.object_id)!;
       const meta = metadata.objects.find(
         (o) => o.object_id === mesh.object_id,
       )!;
+      for (const volume of meta.volumes) if (volume.role !== "ModelPart") excludedRoles.add(volume.role);
       const m = mesh.transform_mm;
       const mirrored =
         m[0] * (m[4] * m[8] - m[5] * m[7]) -
@@ -30,7 +34,8 @@ export async function parse3mf(filePath: string): Promise<StlData> {
           triangles.push({ v1, v2, v3, normal: normal(v1, v2, v3) });
         }
     }
-  return { triangles, name: "3mf_model" };
+  }
+  return { mesh: { triangles, name: "3mf_model" }, excludedRoles: [...excludedRoles], printableInstances };
 }
 function normal(a: Vec3, b: Vec3, c: Vec3): Vec3 {
   const u = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z },
@@ -44,4 +49,8 @@ function normal(a: Vec3, b: Vec3, c: Vec3): Vec3 {
   return length
     ? { x: n.x / length, y: n.y / length, z: n.z / length }
     : { x: 0, y: 0, z: 1 };
+}
+
+export async function parse3mf(filePath: string): Promise<StlData> {
+  return (await read3mfAnalysisInput(filePath)).mesh;
 }

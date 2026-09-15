@@ -1,6 +1,7 @@
 import type { MeshAnalysis, GCodeStats } from "./types.js";
 
 export interface CostEstimate {
+  source: "estimate" | "cli";
   filamentWeightG: number;
   filamentLengthMm: number;
   filamentCostEur: number;
@@ -49,6 +50,7 @@ export function estimateCostFromGCode(
   const electricityCost = (wattage / 1000) * printTimeHours * electricityPrice;
 
   return {
+    source: "cli",
     filamentWeightG: weightG,
     filamentLengthMm: lengthMm,
     filamentCostEur: round2(filamentCost),
@@ -109,6 +111,7 @@ export function estimateCostFromMesh(
   const electricityCost = (wattage / 1000) * printTimeHours * electricityPrice;
 
   return {
+    source: "estimate",
     filamentWeightG: round2(weightG),
     filamentLengthMm: round2(lengthMm),
     filamentCostEur: round2(filamentCost),

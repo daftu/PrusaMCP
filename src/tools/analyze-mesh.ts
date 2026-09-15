@@ -2,20 +2,9 @@ import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { parseStl } from "../stl-parser.js";
-import { parse3mf } from "../threemf-parser.js";
-import { analyzeMesh } from "../mesh-analyzer.js";
-import type { StlData } from "../types.js";
+import { analyzeModel } from "../model-analysis.js";
 
-/**
- * Parse any supported 3D file format.
- */
-export async function parseModel(filePath: string): Promise<StlData> {
-  const lower = filePath.toLowerCase();
-  if (lower.endsWith(".3mf")) return parse3mf(filePath);
-  if (lower.endsWith(".stl")) return parseStl(filePath);
-  throw new Error(`Format non supporté. Formats acceptés : STL, 3MF`);
-}
+export { parseModel } from "../model-analysis.js";
 
 export function registerAnalyzeMesh(server: McpServer) {
   registerContractTool(server,
@@ -47,16 +36,14 @@ export function registerAnalyzeMesh(server: McpServer) {
         }
 
         console.error(`[analyze_mesh] Parsing ${file_path}...`);
-        const mesh = await parseModel(file_path);
-        console.error(`[analyze_mesh] Parsed ${mesh.triangles.length} triangles, analyzing...`);
-        const analysis = analyzeMesh(mesh);
+        const {mesh, analysis, evidence} = await analyzeModel(file_path);
 
         const bb = analysis.boundingBox;
         const lines = [
           `## Analyse Mesh : ${mesh.name}`,
           "",
           `**Dimensions (XYZ)** : ${bb.size.x.toFixed(2)} × ${bb.size.y.toFixed(2)} × ${bb.size.z.toFixed(2)} mm`,
-          `**Volume** : ${analysis.volume.toFixed(2)} mm³ (${(analysis.volume / 1000).toFixed(2)} cm³)`,
+          `**Source mesh volume (not sliced consumption)** : ${analysis.volume.toFixed(2)} mm³ (${(analysis.volume / 1000).toFixed(2)} cm³)`,
           `**Surface** : ${analysis.surfaceArea.toFixed(2)} mm²`,
           `**Triangles** : ${analysis.triangleCount.toLocaleString()}`,
           "",
@@ -79,7 +66,9 @@ export function registerAnalyzeMesh(server: McpServer) {
         ];
 
         return {
-          data: {name:mesh.name,analysis},
+          data: {name:mesh.name,analysis,evidence},
+          resultStatus: evidence.coverage === "partial" ? "partial" : "confirmed",
+          warnings: evidence.warnings,
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {
