@@ -55,3 +55,24 @@ test('AC06 all analysis consumers retain role exclusions and estimate provenance
  }
  assert.match(generated,/layer_height/);
 });
+
+test('AC02 omitted material does not create a PLA profile or auto config',async t=>{
+ const {dir,stl}=await fixture(t);
+ let runnerCalls=0;let loadedConfig;
+ const call=tools(undefined,async(_config,args)=>{runnerCalls++;loadedConfig=args[args.indexOf('--load')+1];await writeFile(args[args.indexOf('--output')+1],'; generated fixture\nG1 X1\n');return {exitCode:0,stdout:'',stderr:''};});
+ const wizard=(await call.print_wizard({file_path:stl,goal:'standard'})).structuredContent;
+ assert.equal(wizard.status,'confirmed');
+ assert.equal(wizard.data.profile,undefined);
+ assert.equal(wizard.data.cost,undefined);
+ assert.ok(wizard.data.questions.some(q=>/matériau/i.test(q.question)));
+ await assert.rejects(call.generate_prusaslicer_config({goal:'standard',output_path:join(dir,'missing-material.ini')}),/material/);
+ const auto=await call.slice_prusaslicer({stl_path:stl,goal:'standard',output_gcode:join(dir,'auto.gcode')});
+ assert.equal(auto.isError,true);
+ assert.match(auto.structuredContent.summary,/material_required/);
+ assert.equal(runnerCalls,0);
+ const configPath=join(dir,'provided.ini');await writeFile(configPath,'layer_height = 0.2\n');
+ const explicit=(await call.slice_prusaslicer({stl_path:stl,config_path:configPath,goal:'standard',output_gcode:join(dir,'explicit.gcode')})).structuredContent;
+ assert.equal(explicit.status,'confirmed');
+ assert.equal(runnerCalls,1);
+ assert.equal(loadedConfig,configPath);
+});

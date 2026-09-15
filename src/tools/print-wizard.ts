@@ -76,11 +76,10 @@ export function registerPrintWizard(server: McpServer) {
         // ─── Section 4: Profil si infos disponibles ──
         let wizardProfile: ReturnType<typeof recommendProfile> | undefined;
         let wizardCost: ReturnType<typeof estimateCostFromMesh> | undefined;
-        if (goal) {
+        if (goal && material) {
           const p = printer ?? "Generic";
           const n = nozzle ?? 0.4;
-          const m = material ?? "PLA";
-          const profile = recommendProfile(p, n, goal, m, analysis);
+          const profile = recommendProfile(p, n, goal, material, analysis);
 
           wizardProfile = profile;
           lines.push(`## 4. Profil recommandé (${profile.goal})`);
@@ -103,7 +102,7 @@ export function registerPrintWizard(server: McpServer) {
             profile.settings.infill_density.value as number,
             profile.settings.perimeters.value as number,
             profile.settings.print_speed.value as number,
-            m,
+            material,
           );
           wizardCost = cost;
           lines.push(`**Temps estimé** : ${cost.printTimeFormatted} | **Coût** : ~${cost.totalCostEur}€ (${cost.filamentWeightG}g de filament)`);

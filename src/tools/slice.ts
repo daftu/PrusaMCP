@@ -53,6 +53,7 @@ export function registerSlice(server: McpServer, config: PrusaConfig, runner = r
 
         // If no config provided but goal is given, generate one
         if (!iniPath && goal) {
+          if (!material) throw new Error("material_required: Matériau requis pour générer une config automatique.");
           console.error("[slice] Generating config from intent...");
 
           model = await analyzeModel(stl_path);
@@ -62,7 +63,7 @@ export function registerSlice(server: McpServer, config: PrusaConfig, runner = r
             printer ?? "Generic",
             nozzle ?? 0.4,
             goal,
-            material ?? "PLA",
+            material,
             meshAnalysis,
           );
 

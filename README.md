@@ -529,6 +529,9 @@ Overhang support, fine-detail, orientation, strength, time and cost suggestions
 are heuristics. Pre-slicing cost objects contain `source=estimate`; file geometry
 retains `source=file` with separate heuristic provenance. Generated INI files are
 artifacts containing estimated settings, not validated replacements for a printer
-profile. Auto-config slicing exposes its analysis as `auto_config_evidence`
+profile. `generate_prusaslicer_config` and auto-config slicing require an
+explicit material; `print_wizard` still analyzes the model and asks for the
+material when it is missing, without proposing a profile. Auto-config slicing
+exposes its analysis as `auto_config_evidence`
 separately from CLI artifact/statistics. Existing `stl_path` inputs on generation
 and slicing also accept 3MF.

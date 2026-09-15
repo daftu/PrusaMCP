@@ -19,7 +19,7 @@ export function registerGenerateConfig(server: McpServer) {
         printer: z.string().default("Generic").describe("Nom de l'imprimante"),
         nozzle: z.number().default(0.4).describe("Diamètre de buse en mm"),
         goal: z.string().describe("Intention d'impression"),
-        material: z.string().default("PLA").describe("Matériau"),
+        material: z.string().describe("Matériau"),
         stl_path: z.string().optional().describe("Chemin STL ou 3MF pour analyse auto"),
         output_path: z.string().optional().describe("Chemin de sortie pour le .ini (sinon fichier temporaire)"),
         custom_settings: z
