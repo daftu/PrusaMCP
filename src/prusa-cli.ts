@@ -8,19 +8,28 @@ export function runPrusaSlicer(
   config: PrusaConfig,
   args: string[],
   timeoutMs: number = DEFAULT_TIMEOUT,
+  trustedScriptId?: string,
 ): Promise<CliResult> {
+  const scripts = config.trustedScripts ?? {};
+  if (trustedScriptId !== undefined && !Object.hasOwn(scripts, trustedScriptId)) {
+    return Promise.resolve({ exitCode: 1, stdout: "", stderr: "Unknown trusted_script_id", errorCode: "unknown_trusted_script" });
+  }
+  const command = trustedScriptId === undefined ? "" : scripts[trustedScriptId];
+  // PrusaSlicer post_process is a C-style serialized string list, not a raw shell string.
+  const scriptValue = command ? `"${command.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r/g, "\\r").replace(/\n/g, "\\n")}"` : "";
   if (!config.executablePath) {
     return Promise.resolve({
       exitCode: 1,
+      errorCode: "spawn_failed",
       stdout: "",
       stderr: "PrusaSlicer not found. Install PrusaSlicer or set PRUSASLICER_PATH.",
     });
   }
 
   return new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       config.executablePath,
-      args,
+      [...args, "--post-process", scriptValue],
       {
         timeout: timeoutMs,
         maxBuffer: 10 * 1024 * 1024,
@@ -33,13 +42,18 @@ export function runPrusaSlicer(
         } else if (error) {
           exitCode = 1;
         }
+        const redact = (text: string) => command ? text.split(scriptValue).join(`[trusted script ${trustedScriptId}]`).split(command).join(`[trusted script ${trustedScriptId}]`) : text;
         resolve({
           exitCode,
-          stdout: stdout ?? "",
-          stderr: stderr ?? "",
+          stdout: redact(stdout ?? ""),
+          stderr: redact(stderr || (error ? error.message : "")),
+          ...(error ? { errorCode: typeof error.code === "string" ? error.code === "ETIMEDOUT" ? "process_timeout" : "spawn_failed" : error.killed ? "process_timeout" : "process_failed" } : {}),
         });
       },
     );
+    // Stock 2.9.6 asks for confirmation before running a configured script.
+    child.stdin?.on("error", () => { /* process result reports early exit */ });
+    child.stdin?.end(trustedScriptId === undefined ? "" : "Y\n");
   });
 }
 

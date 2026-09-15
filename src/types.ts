@@ -119,12 +119,14 @@ export interface PrusaSlicerSettings {
 export interface PrusaConfig {
   executablePath: string;
   profilesDir: string;
+  trustedScripts?: Record<string, string>;
 }
 
 export interface CliResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  errorCode?: string;
 }
 
 export interface GCodeStats {

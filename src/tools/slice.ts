@@ -2,8 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { dirname, basename, resolve, join } from "node:path";
-import { tmpdir } from "node:os";
-import { unlink } from "node:fs/promises";
+import { stat } from "node:fs/promises";
+import { assertOutputAvailable, createArtifactStage, publishArtifact, removeArtifactStage } from "../artifacts.js";
 import type { PrusaConfig, MeshAnalysis } from "../types.js";
 import { runPrusaSlicer, parseGCodeStats } from "../prusa-cli.js";
 import { recommendProfile } from "../profile-engine.js";
@@ -11,7 +11,7 @@ import { writeRawIniFile, profileToIniSettings } from "../ini-writer.js";
 import { parseStl } from "../stl-parser.js";
 import { analyzeMesh } from "../mesh-analyzer.js";
 
-export function registerSlice(server: McpServer, config: PrusaConfig) {
+export function registerSlice(server: McpServer, config: PrusaConfig, runner = runPrusaSlicer) {
   server.registerTool(
     "slice_prusaslicer",
     {
@@ -19,38 +19,36 @@ export function registerSlice(server: McpServer, config: PrusaConfig) {
       description:
         "Slice un fichier STL/3MF avec PrusaSlicer CLI et retourne le G-code + statistiques. " +
         "Peut utiliser un fichier .ini existant ou générer une config depuis une intention.",
-      inputSchema: {
+      inputSchema: z.object({
         stl_path: z.string().describe("Chemin absolu vers le fichier STL ou 3MF"),
         config_path: z.string().optional().describe("Chemin vers un fichier .ini PrusaSlicer existant"),
         output_gcode: z.string().optional().describe("Chemin de sortie pour le G-code"),
+        trusted_script_id: z.string().optional().describe("ID du script autorisé dans la configuration serveur"),
         // Alternative: generate config from intent
         goal: z.string().optional().describe("Si pas de config_path : intention pour générer un profil auto"),
         printer: z.string().optional().describe("Nom de l'imprimante (pour génération auto)"),
         nozzle: z.number().optional().describe("Diamètre de buse (pour génération auto)"),
         material: z.string().optional().describe("Matériau (pour génération auto)"),
-      },
+      }).strict(),
     },
-    async ({ stl_path, config_path, output_gcode, goal, printer, nozzle, material }) => {
+    async ({ stl_path, config_path, output_gcode, goal, printer, nozzle, material, trusted_script_id }) => {
+      let stage: { directory: string; path: string } | undefined;
+      const policy = trusted_script_id === undefined ? "disabled" : `trusted:${trusted_script_id}`;
       try {
+        if (trusted_script_id !== undefined && !Object.hasOwn(config.trustedScripts ?? {}, trusted_script_id)) {
+          throw new Error("unknown_trusted_script: Unknown trusted_script_id");
+        }
         if (!config.executablePath) {
-          return {
-            isError: true,
-            content: [{
-              type: "text" as const,
-              text: "PrusaSlicer non trouvé. Installe PrusaSlicer ou configure PRUSASLICER_PATH.",
-            }],
-          };
+          throw new Error("spawn_failed: PrusaSlicer non trouvé. Installe PrusaSlicer ou configure PRUSASLICER_PATH.");
         }
-
         if (!existsSync(stl_path)) {
-          return {
-            isError: true,
-            content: [{ type: "text" as const, text: `Fichier non trouvé : ${stl_path}` }],
-          };
+          throw new Error(`input_missing: Fichier non trouvé : ${stl_path}`);
         }
 
+        const gcodePath = resolve(output_gcode ?? resolve(dirname(stl_path), basename(stl_path).replace(/\.[^.]+$/, ".gcode")));
+        await assertOutputAvailable(gcodePath);
+        stage = await createArtifactStage(gcodePath);
         let iniPath = config_path;
-        let tempIni = false;
 
         // If no config provided but goal is given, generate one
         if (!iniPath && goal) {
@@ -71,9 +69,8 @@ export function registerSlice(server: McpServer, config: PrusaConfig) {
           );
 
           const settings = profileToIniSettings(profile);
-          iniPath = join(tmpdir(), `prusaslicer-slice-${Date.now()}.ini`);
+          iniPath = join(stage.directory, "generated.ini");
           await writeRawIniFile(settings, iniPath);
-          tempIni = true;
           console.error(`[slice] Generated config at: ${iniPath}`);
         }
 
@@ -84,37 +81,24 @@ export function registerSlice(server: McpServer, config: PrusaConfig) {
           args.push("--load", iniPath);
         }
 
-        // Output path
-        const gcodePath =
-          output_gcode ??
-          resolve(
-            dirname(stl_path),
-            basename(stl_path).replace(/\.[^.]+$/, ".gcode"),
-          );
-        args.push("--output", gcodePath);
-        args.push(stl_path);
+        args.push("--output", stage.path);
+        args.push(resolve(stl_path));
 
-        console.error(`[slice] Running: ${config.executablePath} ${args.join(" ")}`);
-        const result = await runPrusaSlicer(config, args);
-
-        // Cleanup temp ini
-        if (tempIni && iniPath) {
-          try { await unlink(iniPath); } catch { /* ignore */ }
-        }
-
-        // Check result
-        if (result.exitCode !== 0 && !existsSync(gcodePath)) {
+        const result = await runner(config, args, undefined, trusted_script_id);
+        if (result.exitCode !== 0) {
           return {
             isError: true,
-            content: [{
-              type: "text" as const,
-              text: [
-                `Slicing échoué (exit code ${result.exitCode}) :`,
-                result.stderr || result.stdout,
-              ].join("\n"),
-            }],
+            content: [{ type: "text" as const, text: `${result.errorCode ?? "process_failed"}: Slicing échoué (exit code ${result.exitCode}).\n${result.stderr || result.stdout}\nPost-process policy: ${policy}` }],
           };
         }
+        const output = await stat(stage.path).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return undefined;
+          throw error;
+        });
+        if (!output?.isFile() || output.size === 0) {
+          throw new Error(`output_missing: CLI exit code 0 without a nonempty output file\n${result.stderr || result.stdout}`);
+        }
+        await publishArtifact(stage.path, gcodePath);
 
         // Parse G-code stats
         let statsText = "";
@@ -138,6 +122,8 @@ export function registerSlice(server: McpServer, config: PrusaConfig) {
         const lines = [
           `## Slicing terminé`,
           `**G-code** : ${gcodePath}`,
+          `**Exit code** : 0`,
+          `**Post-process policy** : ${policy}`,
           "",
           statsText || "(Pas de statistiques disponibles)",
         ];
@@ -154,9 +140,11 @@ export function registerSlice(server: McpServer, config: PrusaConfig) {
           isError: true,
           content: [{
             type: "text" as const,
-            text: `Erreur de slicing : ${error instanceof Error ? error.message : String(error)}`,
+            text: `Erreur de slicing : ${error instanceof Error ? error.message : String(error)}\nPost-process policy: ${policy}`,
           }],
         };
+      } finally {
+        if (stage) await removeArtifactStage(stage.directory);
       }
     },
   );

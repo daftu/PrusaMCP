@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
+import { z } from "zod";
 import type { PrusaConfig } from "./types.js";
 
 const DEFAULT_INSTALL_PATHS = [
@@ -75,5 +76,8 @@ export function loadConfig(): PrusaConfig {
     );
   }
 
-  return { executablePath, profilesDir };
+  const trustedScripts = z.record(z.string().min(1)).parse(
+    JSON.parse(process.env.PRUSASLICER_TRUSTED_SCRIPTS ?? "{}"),
+  );
+  return { executablePath, profilesDir, trustedScripts };
 }

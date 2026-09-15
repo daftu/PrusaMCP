@@ -2,7 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { dirname, basename, join } from "node:path";
+import { dirname, basename, join, resolve, extname } from "node:path";
+import { assertOutputAvailable, createArtifactStage, publishArtifact, removeArtifactStage } from "../artifacts.js";
 
 export function registerPostprocessGcode(server: McpServer) {
   server.registerTool(
@@ -30,6 +31,7 @@ export function registerPostprocessGcode(server: McpServer) {
       },
     },
     async ({ gcode_path, actions, output_path }) => {
+      let stage: { directory: string; path: string } | undefined;
       try {
         if (!existsSync(gcode_path)) {
           return {
@@ -37,6 +39,14 @@ export function registerPostprocessGcode(server: McpServer) {
             content: [{ type: "text" as const, text: `Fichier non trouvé : ${gcode_path}` }],
           };
         }
+
+        const inputPath = resolve(gcode_path);
+        const name = basename(inputPath);
+        const stem = name.slice(0, name.length - extname(name).length);
+        const outPath = resolve(output_path ?? join(dirname(inputPath), `${stem}_modified.gcode`));
+        if (outPath === inputPath) throw new Error("output_is_input: output_path must differ from gcode_path");
+        // Existing entries include symlinks and hard links to the source.
+        await assertOutputAvailable(outPath);
 
         const content = await readFile(gcode_path, "utf-8");
         const lines = content.split(/\r?\n/);
@@ -61,25 +71,16 @@ export function registerPostprocessGcode(server: McpServer) {
           }
         }
 
-        if (layerPositions.size === 0) {
-          return {
-            isError: true,
-            content: [{
-              type: "text" as const,
-              text: `Aucun marqueur de couche trouvé dans le G-code. ` +
-                `Le fichier a-t-il été généré par PrusaSlicer ou Cura ?`,
-            }],
-          };
-        }
-
-        // Sort actions by layer (descending) to insert from bottom to top
-        const sortedActions = [...actions].sort((a, b) => b.layer - a.layer);
+        // Insert from the bottom; reverse ties so repeated splices preserve request order.
+        const sortedActions = actions.map((action, index) => ({ ...action, index }))
+          .sort((a, b) => b.layer - a.layer || b.index - a.index);
         const insertions: string[] = [];
+        const skipped: string[] = [];
 
         for (const action of sortedActions) {
           const lineIndex = layerPositions.get(action.layer);
           if (lineIndex === undefined) {
-            insertions.push(`Couche ${action.layer} non trouvée (max: ${layerPositions.size})`);
+            skipped.push(`Couche ${action.layer} non trouvée (max: ${layerPositions.size})`);
             continue;
           }
 
@@ -126,22 +127,38 @@ export function registerPostprocessGcode(server: McpServer) {
           insertions.push(`${action.type} @ couche ${action.layer}`);
         }
 
-        // Write output
-        const outPath = output_path ??
-          join(dirname(gcode_path), basename(gcode_path).replace(".gcode", "_modified.gcode"));
+        const changed = insertions.length > 0;
+        if (changed) {
+          stage = await createArtifactStage(outPath);
+          await writeFile(stage.path, lines.join("\n"), { encoding: "utf-8", flag: "wx" });
+          await publishArtifact(stage.path, outPath);
+        }
 
-        await writeFile(outPath, lines.join("\n"), "utf-8");
-
+        const partial = changed && skipped.length > 0;
         const resultLines = [
-          `## G-code modifié`,
-          `**Fichier** : ${outPath}`,
+          changed ? (partial ? "## G-code partiellement modifié" : "## G-code modifié") : "## Aucune modification",
+          ...(changed ? [`**Fichier** : ${outPath}`] : []),
           `**Couches totales** : ${layerPositions.size}`,
           `**Actions insérées** : ${insertions.length}`,
+          `**Actions ignorées** : ${skipped.length}`,
           "",
           ...insertions.map((s) => `- ${s}`),
+          ...skipped.map((s) => `- ${s}`),
         ];
 
         return {
+          structuredContent: {
+            source: "file",
+            coverage: partial ? "partial" : "complete",
+            status: partial ? "partial" : "confirmed",
+            warnings: skipped,
+            data: {
+              changed,
+              inserted: insertions.length,
+              skipped: skipped.length,
+              ...(changed ? { output_path: outPath } : {}),
+            },
+          },
           content: [{ type: "text" as const, text: resultLines.join("\n") }],
         };
       } catch (error) {
@@ -152,6 +169,8 @@ export function registerPostprocessGcode(server: McpServer) {
             text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
           }],
         };
+      } finally {
+        if (stage) await removeArtifactStage(stage.directory);
       }
     },
   );
