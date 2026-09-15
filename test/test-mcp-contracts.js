@@ -54,7 +54,7 @@ test('STDIO tools/list exposes every output contract and read/write/failure call
   t.after(() => rm(dir, {recursive:true,force:true}));
   const file = join(dir,'tetra.stl'); await writeFile(file,model);
   const gcode = join(dir,'source.gcode'); await writeFile(gcode,';LAYER_CHANGE\nG1 X1\n');
-  const transport = new StdioClientTransport({command:process.execPath,args:[resolve('build/index.js')],stderr:'pipe',env:{...process.env,HOME:dir,PRUSASLICER_PATH:join(dir,'missing'),PRUSASLICER_PROFILES_DIR:dir}});
+  const transport = new StdioClientTransport({command:process.execPath,args:[resolve('build/index.js')],stderr:'pipe',env:{...process.env,HOME:dir,USERPROFILE:dir,PRUSASLICER_PATH:join(dir,'missing'),PRUSASLICER_PROFILES_DIR:dir}});
   let stderr=''; transport.stderr?.on('data', chunk => { stderr+=chunk; });
   const client = new Client({name:'contract-tests',version:'1'});
   await client.connect(transport); t.after(() => client.close());
@@ -83,6 +83,9 @@ test('STDIO tools/list exposes every output contract and read/write/failure call
   await call('feedback_stats'); await call('export_feedback');
   const feedback = await call('submit_feedback',{model_name:'synthetic tetra',material:'PLA',printer:'Fixture',nozzle:0.4,goal:'standard',layer_height:0.2,infill_percent:15,perimeters:2,print_speed:40,nozzle_temp:210,bed_temp:60,support_used:false,brim_used:false,quality_score:4,adhesion_score:4,strength_score:4,overall_score:4});
   assert.equal(feedback.data.stored,true);
+  const storedFeedback = JSON.parse(await readFile(join(dir,'.prusa-mcp','feedback.json'),'utf8'));
+  assert.equal(storedFeedback.length,1);
+  assert.equal(storedFeedback[0].modelName,'synthetic tetra');
   assert.equal((await call('feedback_stats')).data.stats.totalPrints,1);
   const exported = await call('export_feedback'); assert.equal(exported.data.print_count,1); assert.equal(exported.data.feedbacks[0].material,'PLA');
   const config = await call('generate_prusaslicer_config',{goal:'standard',output_path:join(dir,'result.ini')});
