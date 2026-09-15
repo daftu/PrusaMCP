@@ -64,3 +64,32 @@ test('typed validation accepts native bed-temperature and cooling-move values',a
   assert.equal(result.valid,true);assert.equal(result.native_validated,true);
   assert.deepEqual(nativeOverrides,{first_layer_bed_temperature:'60',filament_cooling_moves:'4'});
 });
+
+import {writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {ConfigurationService} from '../build/config-resolver.js';
+import {configurationFixture} from './config-fixtures.js';
+test('stock two-extruder snapshot accepts native short temperature vector and indexed edits', {skip:!process.env.PRUSASLICER_REAL_TEST,timeout:60000},async t=>{
+  const f=await configurationFixture(t);
+  const input=join(f.directory,'two-extruders.ini');
+  await writeFile(input,'printer_technology = FFF\nnozzle_diameter = 0.4,0.6\ntemperature = 210\n');
+  const service=new ConfigurationService(f.config);
+  const resolved=await service.resolveFile(input);
+  assert.equal(resolved.extruder_count,2);
+  assert.equal(resolved.settings.temperature,'210');
+  for (const [changes,expected] of [
+    [[change('temperature',[220])],'220'],
+    [[change('temperature',220,0)],'220,210'],
+    [[change('temperature',220,1)],'210,220'],
+  ]) {
+    const plan=validateSettingChanges(resolved,resolved.revision.sha256,changes);
+    assert.equal(plan.valid,true,JSON.stringify(plan.errors));
+    assert.equal(plan.overrides.temperature,expected);
+    const publicResult=await validateSettings(service,resolved.revision.sha256,changes);
+    assert.equal(publicResult.valid,true,JSON.stringify(publicResult.errors));
+    assert.equal(publicResult.native_validated,true);
+    const native=await service.resolveFile(input,plan.overrides);
+    assert.equal(native.settings.temperature,expected);
+    assert.equal(native.extruder_count,2);
+  }
+});

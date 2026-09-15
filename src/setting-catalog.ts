@@ -106,10 +106,11 @@ export function validateSettingChanges(snapshot: ValidationSnapshot, snapshotRev
     const values = Array.isArray(value) ? value : [value];
     const invalid = values.map(v => valueError(d, v)).find(Boolean);
     if (invalid) { fail("wrong_value", invalid); continue; }
-    if (d.extruder_indexed && !indexed && values.length !== snapshot.extruder_count) { fail("invalid_vector_length", "Vector must contain one value per extruder"); continue; }
+    if (d.extruder_indexed && !indexed && (values.length === 0 || values.length > snapshot.extruder_count)) { fail("invalid_vector_length", "Vector must contain at least one value and at most one per extruder"); continue; }
     if (indexed) {
       const current = deserializeSetting(d, overrides[address.key] ?? snapshot.settings[address.key] ?? "");
-      if (!Array.isArray(current) || current.length !== snapshot.extruder_count) { fail("unknown_effective_value", "Snapshot does not establish the full extruder vector"); continue; }
+      if (!Array.isArray(current) || current.length === 0 || current.length > snapshot.extruder_count) { fail("unknown_effective_value", "Snapshot does not establish the extruder vector"); continue; }
+      while (current.length < snapshot.extruder_count) current.push(current[0]);
       current[address.extruder_index!] = value as string | number | boolean;
       overrides[address.key] = serializeSetting(d, current);
     } else overrides[address.key] = serializeSetting(d, value);
