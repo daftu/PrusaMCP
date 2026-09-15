@@ -431,3 +431,61 @@ String serialization follows the native
 [Config implementation](https://github.com/prusa3d/PrusaSlicer/blob/version_2.9.6/src/libslic3r/Config.cpp),
 and confirmed GUI category mappings come from
 [Tab.cpp](https://github.com/prusa3d/PrusaSlicer/blob/version_2.9.6/src/slic3r/GUI/Tab.cpp).
+
+### Saved 3MF projects
+
+`read_project_geometry(path)` reads the package's main-model relationship, local
+mesh indices, components and build instances. Source vertices use the model's
+unit; `transform_mm` and instance bounding boxes use millimeters. Object, volume
+and instance IDs are scoped to the returned SHA-256 revision. Unused resources
+remain resources and are not added to the build. Required geometry extensions,
+cross-part references, missing objects and cyclic components are rejected.
+
+`read_project_metadata(path, resolve_effective=false)` links PrusaSlicer object
+and volume overrides to those IDs. It reports roles, printability and zero-based
+extruder assignments (`null` means no explicit assignment). Stored overrides are
+not effective values. With `resolve_effective=true`, the existing native 2.9.6
+configuration resolver supplies a separate global snapshot; scoped effective
+values remain unknown. Host secrets and executable scripts are omitted from
+responses. Painting, variable layers, text/SVG and SLA payloads are reported as
+opaque presence, with partial coverage, and are never generated or interpreted.
+These reads describe the saved file, not unsaved GUI state.
+
+`write_project_copy(source, expected_revision, supported_patch, output)` creates
+a new file and refuses an existing destination or stale source revision. The
+patch is an array, including an empty array for a preserving copy:
+
+```json
+[
+  {"operation":"rename_object","object_id":"object:1","name":"Bracket"},
+  {"operation":"transform_instance","instance_id":"instance:0","transform":[1,0,0,0,1,0,0,0,1,10,0,0]}
+]
+```
+
+Matrices use the 3MF row-vector order (nine linear coefficients followed by
+three translations in the model unit). Only the identified XML attributes are
+patched; every unedited ZIP entry's uncompressed content remains identical.
+ZIP compression and container metadata can change. Unknown dependent package
+parts prevent instance transforms; opaque auxiliary geometry permits origin
+translations but prevents changes of basis that would need native regeneration.
+A missing native object-name field is not synthesized. The source is checked
+again immediately before atomic publication without replacement. The writer
+reports `native_validated=false`: it does not launch PrusaSlicer. The supported
+format is checked separately with stock 2.9.6 open/save acceptance fixtures.
+
+Legacy mesh analysis now includes only printable build instances and ModelPart
+volumes. Its volume is the source mesh volume: it does not compute negative
+volume subtraction or overlapping-volume union, and is not a sliced material
+consumption measurement.
+
+3MF archives are read in memory without extracting paths to disk. XML DTDs are
+rejected. Server environment variables `PRUSAMCP_3MF_MAX_TOTAL_BYTES` (default
+1073741824) and `PRUSAMCP_3MF_MAX_ENTRY_BYTES` (default 536870912) limit the total
+and individual uncompressed entry sizes. Both must be positive integer byte
+counts. Limits are checked before entry decompression and during streaming.
+
+The text fixture `test/fixtures/native-2.9.6-project.json` contains selected
+unchanged entries from a synthetic cube project saved in stock PrusaSlicer
+2.9.6: ModelPart, NegativeVolume, ParameterModifier, overrides and variable
+layers. Thumbnail and global print configuration are excluded. Synthetic tests
+supply their own global overrides and opaque painting/SLA examples.
