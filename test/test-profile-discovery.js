@@ -19,8 +19,9 @@ test('same user/system names have distinct IDs and reject ambiguous native selec
   assert.notEqual(model.printers[0].id,model.printers[1].id);
   await assert.rejects(service.listPresets(model.printers[0].id,'FFF'),/ambiguous_preset/);
 });
-test('SLA compatibility results never include FFF filaments', async()=>{
-  const service=new ProfileService({profilesDir:'/fixture',executablePath:''});
+test('SLA compatibility results never include FFF filaments', async(t)=>{
+  const profilesDir=await vendorFixture(t,{Fixture:'[sla_print:SLA Print]\nlayer_height = 0.05\n[sla_material:Resin]\nmaterial_type = Tough\n'});
+  const service=new ProfileService({profilesDir,executablePath:''});
   service.query=async()=>({printer_models:[{id:'sla',name:'SLA',technology:'SLA',vendor_id:'Fixture',vendor_name:'Fixture',printer_profiles:[{name:'SLA Printer',bed:{}}]}]});
   const [model]=await service.listPrinterModels('SLA');
   service.query=async()=>({printer_profile:'SLA Printer',print_profiles:[{name:'SLA Print',sla_material_profiles:['Resin'],filament_profiles:['PLA']} ]});
@@ -28,12 +29,33 @@ test('SLA compatibility results never include FFF filaments', async()=>{
   assert.deepEqual(profiles.map(p=>p.kind),['sla_print','sla_material']);
   assert.deepEqual(profiles[1].compatible_printer_ids,[model.printers[0].id]);
   assert.deepEqual(profiles[1].compatible_print_ids,[profiles[0].id]);
+  assert.equal(profiles[0].vendor_id,'Fixture');
+  assert.equal(profiles[1].vendor_id,'Fixture');
 });
 
-import {writeFile} from 'node:fs/promises';
+import {writeFile,mkdtemp,mkdir,rm} from 'node:fs/promises';
 import {join} from 'node:path';
+import {tmpdir} from 'node:os';
 import {ConfigurationService} from '../build/config-resolver.js';
 import {configurationFixture} from './config-fixtures.js';
+async function vendorFixture(t, files) {
+  const directory=await mkdtemp(join(tmpdir(),'prusamcp-vendor-test-'));
+  t.after(()=>rm(directory,{recursive:true,force:true}));
+  await mkdir(join(directory,'vendor'));
+  for (const [name,content] of Object.entries(files)) await writeFile(join(directory,'vendor',`${name}.ini`),content);
+  return directory;
+}
+test('equal system preset names from two vendor files block discovery before ID collapse',async(t)=>{
+  const profilesDir=await vendorFixture(t,{
+    First:'[print:Shared Print]\nlayer_height = 0.17\n[filament:Shared PLA]\nfilament_type = PLA\n',
+    Second:'[print:Shared Print]\nlayer_height = 0.20\n[filament:Shared PLA]\nfilament_type = PLA\n',
+  });
+  const service=new ProfileService({profilesDir,executablePath:''});
+  service.query=async()=>({printer_models:[{id:'fixture',name:'Fixture',technology:'FFF',vendor_id:'First',vendor_name:'First',variants:[{name:0.4,printer_profiles:[{name:'Printer',extruders_cnt:1,bed:{}}]}]}]});
+  const [model]=await service.listPrinterModels('FFF');
+  service.query=async()=>({printer_profile:'Printer',print_profiles:[{name:'Shared Print',filament_profiles:['Shared PLA']}]});
+  await assert.rejects(service.listPresets(model.printers[0].id,'FFF'),/ambiguous_preset/);
+});
 test('stock SLA queries return native resin compatibility and native SLA tuple resolution', {skip:!process.env.PRUSASLICER_REAL_TEST,timeout:60000},async t=>{
   const f=await configurationFixture(t);
   await writeFile(join(f.profilesDir,'PrusaSlicer.ini'),'version = 2.9.6\n\n[vendor:SyntheticSLA]\nmodel:SYNTHSLA = default\n');
@@ -74,8 +96,9 @@ test('query schemas reject missing technology-specific arrays',()=>{
   assert.throws(()=>parseProfileQuery({exitCode:1,stdout:JSON.stringify({printer_profile:'x',print_profiles:[{name:'x'}]}),stderr:''},'2.9.6',presetQuerySchema),/invalid_profile_query/);
 });
 
-test('material query with wrong native technology array is rejected',async()=>{
-  const service=new ProfileService({profilesDir:'/fixture',executablePath:''});
+test('material query with wrong native technology array is rejected',async(t)=>{
+  const profilesDir=await vendorFixture(t,{Fixture:'[print:Print]\nlayer_height = 0.17\n'});
+  const service=new ProfileService({profilesDir,executablePath:''});
   service.query=async()=>({printer_models:[{id:'sla',name:'SLA',technology:'SLA',vendor_id:'Fixture',vendor_name:'Fixture',printer_profiles:[{name:'SLA Printer',bed:{}}]}]});
   const [model]=await service.listPrinterModels('SLA');
   service.query=async()=>({printer_profile:'SLA Printer',print_profiles:[{name:'Print',filament_profiles:['PLA']}]});

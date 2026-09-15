@@ -29,7 +29,8 @@ test('stock 2.9.6 inherited tuple equals native full export; overrides win; unkn
   const printer=models[0].printers[0];
   const {profiles}=await service.profiles.listPresets(printer.id,'FFF');
   const print=profiles.find(p=>p.kind==='print');const material=profiles.find(p=>p.kind==='filament');
-  assert.equal(material.vendor_id,null);
+  assert.equal(print.vendor_id,'Synthetic');
+  assert.equal(material.vendor_id,'Synthetic');
   const tuple={printer_profile_id:printer.id,print_profile_id:print.id,material_profile_ids:[material.id]};
   const snapshot=await service.resolvePresets(tuple);
   assert.equal(snapshot.settings.layer_height,'0.17');

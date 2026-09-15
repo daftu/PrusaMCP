@@ -351,9 +351,9 @@ For example, resolve a saved configuration:
 Alternatively, use `base.type = "presets"` with `printer_profile_id`,
 `print_profile_id`, and `material_profile_ids` returned by the listing tools.
 The tuple must provide one compatible material per FFF extruder, or one SLA
-material. Ambiguous native preset names are rejected. Material and print query
-results do not establish their vendor provenance, so `vendor_id` is null for
-those references.
+material. Ambiguous native preset names are rejected. System print/material IDs use the verified vendor file identity. A missing
+or ambiguous system vendor source is rejected. User presets retain
+`vendor_id = null` when their vendor is unknown.
 
 Use the returned `revision.sha256` as `snapshot_revision` for `validate_settings`:
 

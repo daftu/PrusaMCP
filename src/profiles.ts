@@ -1,4 +1,4 @@
-import { cp, mkdtemp, rm } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -6,6 +6,7 @@ import { z } from "zod";
 import { runPrusaSlicer } from "./prusa-cli.js";
 import { detectCliCapabilities } from "./capabilities.js";
 import type { PrusaConfig, CliResult } from "./types.js";
+import { readIni } from "./ini-reader.js";
 
 const nativePrinter = z.object({ name: z.string(), extruders_cnt: z.number().int().positive().optional(), bed: z.object({}).passthrough() });
 const nativeModel = z.object({ id: z.string(), name: z.string(), technology: z.enum(["FFF", "SLA"]), vendor_name: z.string(), vendor_id: z.string(),
@@ -93,18 +94,37 @@ export class ProfileService {
     this.assertUnambiguous(printer);
     const result = await this.query(["--query-print-filament-profiles", "--printer-profile", printer.name], presetQuerySchema);
     if (result.printer_profile !== printer.name) throw new Error("profile_query_mismatch: slicer returned another printer");
+    const sources = new Map<string, Set<string>>();
+    const vendorDir = join(this.config.profilesDir, "vendor");
+    for (const file of (await readdir(vendorDir)).filter(file => file.endsWith(".ini"))) {
+      const vendorId = file.slice(0, -4);
+      for (const section of readIni(await readFile(join(vendorDir, file), "utf8")).sections) {
+        if (!/^(print|filament|sla_print|sla_material):/.test(section.name)) continue;
+        const owners = sources.get(section.name) ?? new Set<string>();
+        owners.add(vendorId);
+        sources.set(section.name, owners);
+      }
+    }
+    const sourceVendor = (kind: PresetReference["kind"], name: string, origin: PresetReference["origin"]) => {
+      if (origin === "user") return null;
+      const owners = sources.get(`${kind}:${name}`);
+      if (owners?.size !== 1) throw new Error("ambiguous_preset: system preset vendor source cannot be established uniquely");
+      return [...owners][0];
+    };
     const profiles: PresetReference[] = [];
     for (const [origin, prints] of [["system", result.print_profiles], ["user", result.user_print_profiles ?? []]] as const) {
       for (const item of prints) {
         if (technology === "FFF" ? item.filament_profiles === undefined : item.sla_material_profiles === undefined) {
           throw new Error("invalid_profile_query: native material array does not match printer technology");
         }
-        const print = this.ref(technology === "FFF" ? "print" : "sla_print", item.name, origin, null, technology, { compatible_printer_ids: [printer.id] });
+        const printKind = technology === "FFF" ? "print" : "sla_print";
+        const print = this.ref(printKind, item.name, origin, sourceVendor(printKind, item.name, origin), technology, { compatible_printer_ids: [printer.id] });
         profiles.push(print);
         const materialGroups = technology === "FFF" ? [["system", item.filament_profiles ?? []], ["user", item.user_filament_profiles ?? []]] as const : [["system", item.sla_material_profiles ?? []], ["user", item.user_sla_material_profiles ?? []]] as const;
         for (const [materialOrigin, materials] of materialGroups) {
           for (const name of materials) {
-            const material = this.ref(technology === "FFF" ? "filament" : "sla_material", name, materialOrigin, null, technology, { compatible_printer_ids: [printer.id], compatible_print_ids: [print.id] });
+            const materialKind = technology === "FFF" ? "filament" : "sla_material";
+            const material = this.ref(materialKind, name, materialOrigin, sourceVendor(materialKind, name, materialOrigin), technology, { compatible_printer_ids: [printer.id], compatible_print_ids: [print.id] });
             const existing = profiles.find(profile => profile.id === material.id);
             if (existing) existing.compatible_print_ids = [...new Set([...existing.compatible_print_ids, ...material.compatible_print_ids])]; else profiles.push(material);
           }
