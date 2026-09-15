@@ -70,7 +70,7 @@ static json run(const json &request) {
     }
     PresetBundle output;
     std::set<std::string> removed;
-    json result = {{"protocol", 1}, {"version", "2.9.6"}, {"profiles", json::array()}, {"substitutions", json::array()}};
+    json result = {{"protocol", 1}, {"version", "2.9.6"}, {"profiles", json::array()}, {"substitutions", json::array()}, {"bundle_omitted_fields", json::array()}};
     for (const auto &sub : substitutions) for (const auto &item : sub.substitutions)
         if (item.opt_def) result["substitutions"].push_back({{"kind", bundle.get_presets(sub.preset_type).section_name()}, {"name", sub.preset_name}, {"key", item.opt_def->opt_key}});
     if (operation == "import") {
@@ -118,6 +118,9 @@ static json run(const json &request) {
         if (!effective.validate().empty()) throw std::runtime_error("native_configuration_rejected");
         auto safe = sanitize(effective, removed);
         safe.save(request.at("output_flat_path").get<std::string>());
+        // Native preset bundles serialize collections, not project configuration.
+        for (const auto &key : bundle.project_config.keys())
+            if (safe.has(key)) result["bundle_omitted_fields"].push_back(key);
         result["selection"] = selection;
         if (request.contains("overrides_path")) {
             output = PresetBundle();

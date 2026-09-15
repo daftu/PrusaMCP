@@ -6,7 +6,7 @@ import { z } from "zod";
 export const nativeProfileSchema = z.object({ kind: z.enum(["printer", "print", "filament", "sla_print", "sla_material"]), name: z.string(), settings: z.record(z.string()) });
 const selectionSchema = z.object({ printer: z.string(), print: z.string(), materials: z.array(z.string()) });
 const resultSchema = z.object({ protocol: z.literal(1), version: z.literal("2.9.6"), profiles: z.array(nativeProfileSchema),
-  substitutions: z.array(z.object({ kind: z.string(), name: z.string(), key: z.string() })), omitted_fields: z.array(z.string()),
+  substitutions: z.array(z.object({ kind: z.string(), name: z.string(), key: z.string() })), omitted_fields: z.array(z.string()), bundle_omitted_fields: z.array(z.string()),
   selection: selectionSchema.optional(), technology: z.enum(["FFF", "SLA"]).optional() });
 export type NativeProfile = z.infer<typeof nativeProfileSchema>;
 export interface NativeConfigRequest {

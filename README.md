@@ -410,6 +410,11 @@ material names to preserve separate values for each extruder; printer and print
 names remain unchanged so name-based compatibility conditions still apply. A snapshot from a
 flat file has no selected preset set and cannot be exported as a bundle.
 
+Native preset bundles omit project fields such as color-change heights and purge
+volume matrices. Bundle export names these fields in `omitted_fields` and
+`bundle_omitted_fields`, and reports `partial` with a warning. The source snapshot
+and flat INI retain their values; use flat INI when transferring project settings.
+
 The helper runs in a separate process and uses no GUI or private application ABI.
 Its sources and pinned build instructions are included; no prebuilt helper is
 bundled with the npm package. See its AGPL-3.0-or-later notices before distributing

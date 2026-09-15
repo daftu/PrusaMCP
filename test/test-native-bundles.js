@@ -153,3 +153,39 @@ test('native selected export preserves different override values for two extrude
   assert.equal(second.settings.temperature,'210,220');assert.equal(second.extruder_count,2);
   assert.deepEqual(settingsWithoutPresetNames(second.settings),settingsWithoutPresetNames(first.settings));
 });
+
+import {validateSettings} from '../build/tools/validate-settings.js';
+test('bundle export discloses project-only omissions while snapshot and flat INI retain purge settings',native,async t=>{
+  const f=await configurationFixture(t);const service=new ConfigurationService(f.config);
+  const input=join(f.directory,'purge.ini');await writeFile(input,fixture.replace('nozzle_diameter = 0.4','nozzle_diameter = 0.4,0.6'));
+  const imported=await service.importConfiguration(input,'purge');t.after(()=>rm(dirname(imported.artifact.path),{recursive:true,force:true}));
+  const selected=tuple(imported);selected.material_profile_ids.push(selected.material_profile_ids[0]);
+  const base=await service.resolvePresets(selected);
+  const valid=await validateSettings(service,base.revision.sha256,[{address:{scope:'global',key:'wiping_volumes_matrix'},value:[0,150,200,0]},{address:{scope:'global',key:'wiping_volumes_use_custom_matrix'},value:true}]);
+  assert.equal(valid.valid,true);assert.equal(valid.native_validated,true);
+  const snapshot=await service.resolvePresets(selected,{wiping_volumes_matrix:'0,150,200,0',wiping_volumes_use_custom_matrix:'1'});
+  const retained={wiping_volumes_matrix:'0,150,200,0',wiping_volumes_use_custom_matrix:'1'};
+  const flatPath=join(f.directory,'purge-flat.ini');const flat=await service.exportConfiguration(snapshot.snapshot_id,'flat_ini',flatPath);
+  const flatSettings=readIni(await readFile(flatPath,'utf8')).settings;
+  for(const [key,value] of Object.entries(retained)) {
+    assert.equal(snapshot.settings[key],value);assert.equal(flatSettings[key],value);
+    assert.equal(snapshot.omitted_fields.includes(key),false);assert.equal(flat.omitted_fields.includes(key),false);
+  }
+  assert.deepEqual(flat.bundle_omitted_fields,[]);
+  const server=new McpServer({name:'purge-bundle-test',version:'1'});registerProfileTools(server,service);
+  const [s,c]=InMemoryTransport.createLinkedPair();const client=new Client({name:'purge-client',version:'1'});
+  await server.connect(s);await client.connect(c);t.after(async()=>{await client.close();await server.close();});
+  const path=join(f.directory,'purge-bundle.ini');
+  const response=await client.callTool({name:'export_configuration',arguments:{snapshot_id:snapshot.snapshot_id,format:'bundle',output_path:path}});
+  const result=response.structuredContent;
+  assert.equal(result.status,'partial');assert.equal(result.coverage,'partial');assert.ok(result.warnings.some(w=>w.includes('project settings')));
+  for(const key of Object.keys(retained)) {assert.ok(result.data.omitted_fields.includes(key));assert.ok(result.data.bundle_omitted_fields.includes(key));}
+  const again=await service.importConfiguration(path,'purge-again');t.after(()=>rm(dirname(again.artifact.path),{recursive:true,force:true}));
+  const names=readIni(await readFile(path,'utf8')).sections.find(s=>s.name==='presets').settings;
+  const id=(kind,name)=>again.profiles.find(p=>p.kind===kind&&p.name===name).id;
+  const restored=await service.resolvePresets({printer_profile_id:id('printer',names.printer),print_profile_id:id('print',names.print),material_profile_ids:[id('filament',names.filament),id('filament',names.filament_1)]});
+  assert.equal(restored.settings.wiping_volumes_matrix,'0,140,140,0');assert.equal(restored.settings.wiping_volumes_use_custom_matrix,'0');
+  const remaining=settings=>Object.fromEntries(Object.entries(settingsWithoutPresetNames(settings)).filter(([key])=>!result.data.omitted_fields.includes(key)));
+  assert.deepEqual(remaining(restored.settings),remaining(snapshot.settings));
+  assert.equal(service.getSnapshot(snapshot.snapshot_id).settings.wiping_volumes_matrix,'0,150,200,0');
+});

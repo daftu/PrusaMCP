@@ -17,7 +17,7 @@ const flatImportSchema = z.object({workspace_id: z.string(), format: z.literal("
 const importSchema = z.discriminatedUnion("format", [flatImportSchema, z.object({workspace_id: z.string(), format: z.literal("bundle"), profiles: z.array(presetSchema),
   artifact: artifactRefSchema, native_validated: z.literal(true), omitted_fields: z.array(z.string()), converted_fields: z.array(z.string()),
   unsupported_fields: z.array(z.string()), input_diagnostics_known: z.boolean()})]);
-const exportSchema = z.object({ artifact: artifactRefSchema, source_revision: revisionSchema, format: z.enum(["flat_ini", "bundle"]), omitted_fields: z.array(z.string()) });
+const exportSchema = z.object({ artifact: artifactRefSchema, source_revision: revisionSchema, format: z.enum(["flat_ini", "bundle"]), omitted_fields: z.array(z.string()), bundle_omitted_fields: z.array(z.string()) });
 // Overrides are already serialized INI values; typed user edits use validate_settings first.
 const overridesSchema = z.record(z.string().regex(/^[a-z][a-z0-9_]*$/), z.string().regex(/^[^\r\n]*$/)).default({});
 const tupleSchema = z.object({ type: z.literal("presets"), printer_profile_id: z.string(), print_profile_id: z.string(), material_profile_ids: z.array(z.string()).min(1) });
@@ -29,8 +29,9 @@ async function response<D extends z.ZodTypeAny>(schema: D, operation: () => Prom
   let result;
   try {
     const data = await operation();
-    const diagnostics = data as {input_diagnostics_known?: boolean; unsupported_fields?: string[]};
+    const diagnostics = data as {input_diagnostics_known?: boolean; unsupported_fields?: string[]; bundle_omitted_fields?: string[]};
     const warnings = [
+      ...(diagnostics.bundle_omitted_fields?.length ? ["Native preset bundles omit project settings listed in bundle_omitted_fields. Use flat INI to retain these values."] : []),
       ...(diagnostics.input_diagnostics_known === false ? ["Source conversion diagnostics are unavailable; empty conversion lists do not establish that no conversion occurred."] : []),
       ...(diagnostics.unsupported_fields?.length ? ["Some input keys were not retained by the native slicer; see unsupported_fields."] : []),
     ];
@@ -58,7 +59,7 @@ export function registerProfileTools(server: McpServer, service: ConfigurationSe
   server.registerTool("import_configuration", {description: "Import a flat INI or named preset bundle into a server-managed isolated workspace after native validation. Does not install presets in the user directory. Preset bundles use the pinned native helper and return separate profile IDs; resolve a complete tuple of those IDs before exporting selected presets. Empty compatibility lists on imported IDs are not a compatibility verdict; native resolution validates the tuple.",
     inputSchema: {path: z.string(), workspace_id: z.string().min(1)}, outputSchema: toolResultObjectSchema(importSchema), annotations: writeAnnotations},
     async ({path,workspace_id}) => response(importSchema, () => service.importConfiguration(path, workspace_id), "file"));
-  server.registerTool("export_configuration", {description: "Export a resolved snapshot to a new file. Existing paths are never replaced. Flat INI omits host secrets and scripts; omitted fields are named without values. Bundle export requires a snapshot resolved from an explicit preset tuple with the native helper. It exports only those selected native flattened presets, using native generated names when overrides require splitting material values.",
+  server.registerTool("export_configuration", {description: "Export a resolved snapshot to a new file. Existing paths are never replaced. Flat INI omits host secrets and scripts; omitted fields are named without values. Bundle export requires a snapshot resolved from an explicit preset tuple with the native helper. It exports only those selected native flattened presets, using native generated names when overrides require splitting material values. Native bundle project-field exclusions are listed and produce partial coverage; flat INI retains those values.",
     inputSchema: {snapshot_id: z.string(), format: z.enum(["flat_ini", "bundle"]), output_path: z.string()}, outputSchema: toolResultObjectSchema(exportSchema), annotations: writeAnnotations},
     async ({snapshot_id,format,output_path}) => response(exportSchema, () => service.exportConfiguration(snapshot_id, format, output_path), "file"));
 }

@@ -29,7 +29,7 @@ export class ConfigurationService {
   private snapshots = new Map<string, ConfigurationSnapshot>();
   private workspaces = new Map<string, string>();
   private imported = new Map<string, { reference: PresetReference; bundle: string }>();
-  private selectedBundles = new Map<string, string>();
+  private selectedBundles = new Map<string, { content: string; omitted_fields: string[] }>();
   readonly profiles: ProfileService;
   constructor(readonly config: PrusaConfig) { this.profiles = new ProfileService(config); }
 
@@ -171,7 +171,7 @@ export class ConfigurationService {
       snapshot.converted_fields = [...new Set([...snapshot.converted_fields, ...result.substitutions.map(item => item.key)])].sort();
       this.snapshots.set(snapshot.snapshot_id, structuredClone(snapshot));
       this.snapshots.set(snapshot.revision.sha256, structuredClone(snapshot));
-      this.selectedBundles.set(snapshot.snapshot_id, await readFile(outputBundle, "utf8"));
+      this.selectedBundles.set(snapshot.snapshot_id, {content: await readFile(outputBundle, "utf8"), omitted_fields: result.bundle_omitted_fields});
       return snapshot;
     } finally { await rm(temporary, {recursive: true, force: true}); await rm(datadir, {recursive: true, force: true}); }
   }
@@ -219,9 +219,9 @@ export class ConfigurationService {
     await assertOutputAvailable(output_path);
     const stage = await createArtifactStage(output_path);
     try {
-      await writeFile(stage.path, selected ?? serializeNativeSettings(snapshot.settings), { mode: 0o600 });
+      await writeFile(stage.path, selected?.content ?? serializeNativeSettings(snapshot.settings), { mode: 0o600 });
       await publishArtifact(stage.path, output_path);
     } finally { await removeArtifactStage(stage.directory); }
-    return { artifact: { path: output_path, media_type: "text/plain" }, source_revision: snapshot.revision, format, omitted_fields: snapshot.omitted_fields };
+    return { artifact: { path: output_path, media_type: "text/plain" }, source_revision: snapshot.revision, format, omitted_fields: [...new Set([...snapshot.omitted_fields, ...(selected?.omitted_fields ?? [])])].sort(), bundle_omitted_fields: selected?.omitted_fields ?? [] };
   }
 }
