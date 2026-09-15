@@ -282,3 +282,43 @@ The isolated real-backend acceptance test requires Python 3 for its generated
 npm run build
 PRUSASLICER_REAL_TEST=/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer node --test test/test-slice-real.js
 ```
+
+### Structured tool results and capability diagnostics
+
+Every tool publishes an MCP `outputSchema` and returns `structuredContent` with
+`source`, `coverage`, `status`, `warnings`, optional `revision`/`error`, and typed
+`data`. Text content is the same JSON result, including the human-readable
+`summary`; screenshot tools also retain their image content. Execution errors
+set `isError: true` and include an error code. Tool annotations describe side
+effects; they do not authorize an operation.
+
+`coverage` describes the requested operation. `confirmed` means complete
+coverage; partial edits retain their actual results. GUI validation dialogs or
+failed readback require user action and a fresh read, and do not imply that an
+attempted edit was undone. `get_current_model` reports partial coverage because
+saved files and presets do not establish the unsaved GUI scene. An upload's HTTP
+acceptance does not establish physical printing.
+
+Call `get_capabilities` without arguments for read-only diagnostics:
+
+- CLI executable, version, FFF/SLA help options, actions, transformations and
+  limitations. `PRUSASLICER_PATH` overrides automatic discovery even when the
+  configured path is unavailable. The three help probes have bounded timeouts;
+  cached detection is reused only for the same path and binary contents.
+- Host and macOS probe process, separate granted/denied/unknown permission states,
+  GUI-session availability, and the current JXA/capture backend limitations.
+  Probes never request permissions, activate a project, capture an image or slice.
+  The current Quartz selector requires Screen Recording. Automation remains
+  unknown because this probe does not send Apple Events. Permission observations
+  apply to the reported host/probe context, not every application on the machine.
+
+Only version 2.9.6 has the tested-version flag. Help options from another version
+are observations, not a claim that its operations meet the tested integration
+contract. Files remain available independently of CLI and GUI diagnostics;
+individual file access is checked when a tool uses that file.
+
+Shared Zod contracts are exported from `contracts.ts`: file revisions hash the
+contents, while live revisions identify an observed session revision rather than
+a full project snapshot. Setting addresses use zero-based extruder indices and
+require a target for object, volume and height-range scopes. Unknown effective
+settings carry `effective_known: false` and `effective_value: null`.

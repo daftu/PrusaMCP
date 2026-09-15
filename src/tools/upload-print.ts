@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { readFile } from "node:fs/promises";
@@ -47,7 +48,7 @@ function httpUpload(
 }
 
 export function registerUploadPrint(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "upload_print",
     {
       title: "Envoyer un G-code à l'imprimante",
@@ -142,13 +143,15 @@ async function uploadToOctoPrint(
 
   if (result.status >= 200 && result.status < 300) {
     return {
+      data:{http_status:result.status,file_name:fileName,server:baseUrl,start_requested:startPrint,physical_state:"unknown" as const},
+      warnings:["HTTP acceptance does not confirm physical printing."],
       content: [{
         type: "text" as const,
         text: [
           `## Upload OctoPrint réussi`,
           `**Fichier** : ${fileName}`,
           `**Serveur** : ${baseUrl}`,
-          startPrint ? `**Impression lancée**` : `**En attente** — lance l'impression depuis l'interface OctoPrint`,
+          startPrint ? `**Demande de démarrage envoyée** — état physique non confirmé` : `**En attente** — lance l'impression depuis l'interface OctoPrint`,
         ].join("\n"),
       }],
     };
@@ -183,6 +186,9 @@ async function uploadToPrusaConnect(
 
   if (result.status >= 200 && result.status < 300) {
     return {
+      data:{http_status:result.status,file_name:fileName,server:baseUrl,start_requested:_startPrint,physical_state:"unknown" as const},
+      resultStatus:_startPrint ? "partial" as const : "confirmed" as const,
+      warnings:["HTTP acceptance does not verify the Prusa Connect service API or physical printing.",...(_startPrint ? ["The requested print start was not sent."] : [])],
       content: [{
         type: "text" as const,
         text: [

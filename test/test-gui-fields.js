@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { GUI_SCRIPT, numericFieldValue } from '../build/tools/gui-fields.js';
-function harness({value='15',enabled=true,duplicate=false,validationDialog=false}={}) {
+function harness({value='15',enabled=true,duplicate=false,validationDialog=false,readbackError=false}={}) {
  let current=value, writes=0, tabs=0, frontmost=false;
  const field={role:()=> 'AXTextField',enabled:()=>enabled, attributes:{byName:()=>({value:()=> 'Top surface speed.\ndefault value\t: 50\nparameter name\t: top_solid_infill_speed'})}};
  Object.defineProperty(field,'value',{get:()=>()=>current,set:v=>{current=v;writes++;}});
  const root={role:()=> 'AXWindow',uiElements:()=>[{role:()=> 'AXGroup',name:()=> 'Speed',uiElements:()=>duplicate?[field,field]:[field]}]};
  root.name=()=> 'model';
- const windowList=()=>tabs && validationDialog ? [root,{uiElements:()=>[],name:()=> 'Validation'}] : [root];
+ const windowList=()=>{if(tabs && readbackError) throw Error('Window unavailable');return tabs && validationDialog ? [root,{uiElements:()=>[],name:()=> 'Validation'}] : [root];};
  windowList.whose=()=>()=>[root];
  const process={windows:windowList};
  Object.defineProperty(process,'frontmost',{get:()=>()=>frontmost,set:v=>{frontmost=v;}});
@@ -40,4 +40,9 @@ test('retained editor text plus validation dialog is not reported as success',()
  const h=harness({validationDialog:true});const r=h.run({parameter:'top_solid_infill_speed',expected_value:'15',value:'-20'});
  assert.equal(r.verification,'validation_pending');assert.equal(r.committed,null);assert.equal(r.saved,false);
  assert.equal(h.state().current,'-20');
+});
+
+test('exception after editor write reports unconfirmed mutation and requires refresh',()=>{
+ const h=harness({readbackError:true});const r=h.run({parameter:'top_solid_infill_speed',expected_value:'15',value:'20'});
+ assert.equal(h.state().current,'20');assert.equal(r.editor_changed,null);assert.equal(r.committed,null);assert.equal(r.saved,false);assert.equal(r.verification,'validation_pending');assert.match(r.message,/refresh/);
 });

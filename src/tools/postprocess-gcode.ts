@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { readFile, writeFile } from "node:fs/promises";
@@ -6,7 +7,7 @@ import { dirname, basename, join, resolve, extname } from "node:path";
 import { assertOutputAvailable, createArtifactStage, publishArtifact, removeArtifactStage } from "../artifacts.js";
 
 export function registerPostprocessGcode(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "postprocess_gcode",
     {
       title: "Post-traiter un G-code",
@@ -134,7 +135,7 @@ export function registerPostprocessGcode(server: McpServer) {
           await publishArtifact(stage.path, outPath);
         }
 
-        const partial = changed && skipped.length > 0;
+        const partial = skipped.length > 0;
         const resultLines = [
           changed ? (partial ? "## G-code partiellement modifié" : "## G-code modifié") : "## Aucune modification",
           ...(changed ? [`**Fichier** : ${outPath}`] : []),

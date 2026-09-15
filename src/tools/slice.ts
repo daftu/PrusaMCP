@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
@@ -12,7 +13,7 @@ import { parseStl } from "../stl-parser.js";
 import { analyzeMesh } from "../mesh-analyzer.js";
 
 export function registerSlice(server: McpServer, config: PrusaConfig, runner = runPrusaSlicer) {
-  server.registerTool(
+  registerContractTool(server,
     "slice_prusaslicer",
     {
       title: "Slicer un modèle 3D avec PrusaSlicer",
@@ -102,9 +103,10 @@ export function registerSlice(server: McpServer, config: PrusaConfig, runner = r
 
         // Parse G-code stats
         let statsText = "";
+        let stats: Awaited<ReturnType<typeof parseGCodeStats>> = {};
         if (existsSync(gcodePath)) {
           try {
-            const stats = await parseGCodeStats(gcodePath);
+            stats = await parseGCodeStats(gcodePath);
             statsText = [
               stats.estimatedTime ? `**Temps estimé** : ${stats.estimatedTime}` : null,
               stats.filamentUsedG ? `**Filament** : ${stats.filamentUsedG}g` : null,
@@ -133,6 +135,7 @@ export function registerSlice(server: McpServer, config: PrusaConfig, runner = r
         }
 
         return {
+          data: {artifact:{path:gcodePath,media_type:"text/x.gcode"},exit_code:0,stats,post_process_policy:policy},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

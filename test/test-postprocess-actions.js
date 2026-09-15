@@ -35,6 +35,8 @@ for (const content of [';LAYER_CHANGE\nG1 X1\n', 'G1 X1\n']) {
     const { run, dir } = await fixture(t, content);
     const result = await run([{ layer: 99, type: 'pause' }]);
     assert.deepEqual(result.structuredContent.data, { changed: false, inserted: 0, skipped: 1 });
+    assert.equal(result.structuredContent.status, 'partial');
+    assert.equal(result.structuredContent.coverage, 'partial');
     assert.doesNotMatch(result.content[0].text, /G-code modifié/);
     assert.deepEqual(await readdir(dir), ['part.gcode']);
   });

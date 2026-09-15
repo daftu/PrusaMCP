@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { readFile, readdir, stat } from "node:fs/promises";
@@ -169,7 +170,7 @@ async function readPrusaSlicerState(profilesDir: string): Promise<PrusaSlicerSta
 // ─── Tool Registration ───────────────────────────────────────
 
 export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) {
-  server.registerTool(
+  registerContractTool(server,
     "get_current_model",
     {
       title: "Voir le modèle ouvert dans PrusaSlicer",
@@ -201,6 +202,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
         }
 
         // 2. Get window title to find current file
+        let modelAnalysis: ReturnType<typeof analyzeMesh> | undefined;
         const windowTitle = await getPrusaSlicerWindowTitle(window_id);
 
         if (!windowTitle) {
@@ -229,7 +231,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
           lines.push("**Modèle** : Aucun nom de fichier détectable dans le titre; un projet non enregistré peut contenir des objets.");
           lines.push("");
           lines.push("_Charge un fichier STL/3MF dans PrusaSlicer pour que je puisse l'analyser._");
-          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          return { data:{window_title:windowTitle,file_path:null,presets:state},resultStatus:"partial",warnings:["Saved presets and window title do not establish the unsaved live scene."], content: [{ type: "text" as const, text: lines.join("\n") }] };
         }
 
         lines.push(`## Fichier détecté : ${fileName}`);
@@ -254,7 +256,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
           lines.push(`Dossiers cherchés : ${searchDirs.join(", ")}`);
           lines.push("");
           lines.push("_Donne-moi le chemin complet pour que je puisse l'analyser._");
-          return { content: [{ type: "text" as const, text: lines.join("\n") }] };
+          return { data:{window_title:windowTitle,file_path:null,presets:state},resultStatus:"partial",warnings:["Saved presets and window title do not establish the unsaved live scene."], content: [{ type: "text" as const, text: lines.join("\n") }] };
         }
 
         lines.push(`**Chemin** : ${filePath}`);
@@ -274,6 +276,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
           console.error(`[get_current_model] Analyzing: ${filePath}`);
           const stl = await parseStl(filePath);
           const analysis = analyzeMesh(stl);
+          modelAnalysis = analysis;
           const bb = analysis.boundingBox;
 
           lines.push("## Analyse Mesh");
@@ -302,6 +305,7 @@ export function registerGetCurrentModel(server: McpServer, config: PrusaConfig) 
         }
 
         return {
+          data:{window_title:windowTitle,file_path:filePath,presets:state,analysis:modelAnalysis},resultStatus:"partial",warnings:["Saved file and presets may differ from the unsaved live scene."],
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

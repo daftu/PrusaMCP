@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
@@ -6,7 +7,7 @@ import { analyzeMesh } from "../mesh-analyzer.js";
 import { detectPrintIssues } from "../print-issues.js";
 
 export function registerCheckPrintability(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "check_printability",
     {
       title: "Vérifier la printabilité d'un modèle",
@@ -96,6 +97,7 @@ export function registerCheckPrintability(server: McpServer) {
         }
 
         return {
+          data: {report},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

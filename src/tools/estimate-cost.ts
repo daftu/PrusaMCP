@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
@@ -7,7 +8,7 @@ import { estimateCostFromMesh } from "../cost-estimator.js";
 import { recommendProfile } from "../profile-engine.js";
 
 export function registerEstimateCost(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "estimate_cost",
     {
       title: "Estimer le coût d'impression",
@@ -45,6 +46,7 @@ export function registerEstimateCost(server: McpServer) {
         };
 
         const lines: string[] = [];
+        const estimates: Array<{goal:string;estimate:ReturnType<typeof estimateCostFromMesh>}> = [];
 
         if (compare_profiles) {
           // Compare draft / standard / quality
@@ -73,6 +75,7 @@ export function registerEstimateCost(server: McpServer) {
               analysis, lh, infill, perimeters, speed, material, params,
             );
 
+            estimates.push({goal,estimate});
             comparisons.push({
               name: goal,
               time: estimate.printTimeFormatted,
@@ -108,6 +111,7 @@ export function registerEstimateCost(server: McpServer) {
             analysis, lh, infill, perimeters, speed, material, params,
           );
 
+          estimates.push({goal:"standard",estimate});
           lines.push("## Estimation de coût");
           lines.push(`**Temps** : ${estimate.printTimeFormatted}`);
           lines.push(`**Filament** : ${estimate.filamentWeightG}g (${estimate.filamentLengthMm.toFixed(0)}mm)`);
@@ -117,6 +121,7 @@ export function registerEstimateCost(server: McpServer) {
         }
 
         return {
+          data: {estimates},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

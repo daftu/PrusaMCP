@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
@@ -7,7 +8,7 @@ import { analyzeMesh } from "../mesh-analyzer.js";
 import type { MeshAnalysis } from "../types.js";
 
 export function registerRecommendProfile(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "recommend_profile",
     {
       title: "Recommander un profil d'impression",
@@ -106,6 +107,7 @@ export function registerRecommendProfile(server: McpServer) {
         }
 
         return {
+          data: {profile,analysis:meshAnalysis},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

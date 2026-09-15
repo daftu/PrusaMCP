@@ -137,3 +137,5 @@ export interface GCodeStats {
   filamentCost?: number;
   layerCount?: number;
 }
+
+export type { ToolResult, ArtifactRef, SettingAddress, TypedSetting, Revision } from "./contracts.js";

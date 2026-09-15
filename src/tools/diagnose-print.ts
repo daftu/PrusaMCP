@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -274,7 +275,7 @@ const DIAGNOSTIC_DB: DiagnosticEntry[] = [
 ];
 
 export function registerDiagnosePrint(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "diagnose_print",
     {
       title: "Diagnostiquer un défaut d'impression",
@@ -315,6 +316,8 @@ export function registerDiagnosePrint(server: McpServer) {
         // Return all available defects as suggestions
         const available = DIAGNOSTIC_DB.map((e) => `- ${e.defect}`).join("\n");
         return {
+          data:{diagnoses:[],available_defects:DIAGNOSTIC_DB.map(e=>e.defect)},
+          resultStatus:"needs_user_action",
           content: [{
             type: "text" as const,
             text: `Défaut non reconnu : "${defect}"\n\n` +
@@ -325,6 +328,7 @@ export function registerDiagnosePrint(server: McpServer) {
       }
 
       const lines: string[] = [];
+      const allMaterialNotes: string[] = [];
 
       for (const entry of matches) {
         lines.push(`## ${entry.defect}`);
@@ -360,6 +364,7 @@ export function registerDiagnosePrint(server: McpServer) {
             materialNotes.push(`${matUpper} : ventilateur à 0%, enceinte fermée, temp buse 255-260°C minimum`);
           }
 
+          allMaterialNotes.push(...materialNotes);
           if (materialNotes.length > 0) {
             lines.push(`### Notes spécifiques ${matUpper}`);
             for (const note of materialNotes) {
@@ -391,7 +396,8 @@ export function registerDiagnosePrint(server: McpServer) {
       lines.push("_Diagnostic basé sur la Bible de l'impression 3D FDM et les recommandations Prusa officielles._");
 
       return {
-        content: [{ type: "text" as const, text: lines.join("\n") }],
+        data: {diagnoses:matches,material_notes:allMaterialNotes},
+          content: [{ type: "text" as const, text: lines.join("\n") }],
       };
     },
   );

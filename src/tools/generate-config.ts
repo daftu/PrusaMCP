@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import { analyzeMesh } from "../mesh-analyzer.js";
 import type { PrusaSlicerSettings, MeshAnalysis } from "../types.js";
 
 export function registerGenerateConfig(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "generate_prusaslicer_config",
     {
       title: "Générer un fichier config PrusaSlicer",
@@ -82,6 +83,7 @@ export function registerGenerateConfig(server: McpServer) {
         ];
 
         return {
+          data: {artifact:{path:finalPath,media_type:"text/plain"},settings,ini:iniContent},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

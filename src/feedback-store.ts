@@ -70,7 +70,6 @@ async function ensureDir(): Promise<void> {
 }
 
 export async function loadFeedback(): Promise<PrintFeedback[]> {
-  await ensureDir();
   if (!existsSync(FEEDBACK_FILE)) return [];
 
   try {

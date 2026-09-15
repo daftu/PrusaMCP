@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
@@ -5,7 +6,7 @@ import { parseModel } from "./analyze-mesh.js";
 import { suggestOrientation } from "../orientation.js";
 
 export function registerSuggestOrientation(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "suggest_orientation",
     {
       title: "Suggérer la meilleure orientation d'impression",
@@ -52,6 +53,7 @@ export function registerSuggestOrientation(server: McpServer) {
         }
 
         return {
+          data: {orientations:results},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

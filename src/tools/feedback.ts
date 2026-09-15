@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
@@ -17,7 +18,7 @@ import {
 // ─── Submit Feedback ─────────────────────────────────────────
 
 export function registerSubmitFeedback(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "submit_feedback",
     {
       title: "Noter un print",
@@ -54,6 +55,7 @@ export function registerSubmitFeedback(server: McpServer) {
       },
     },
     async (params) => {
+      let storedId: string | undefined;
       try {
         const feedback: PrintFeedback = {
           id: randomUUID(),
@@ -81,6 +83,7 @@ export function registerSubmitFeedback(server: McpServer) {
         };
 
         await addFeedback(feedback);
+        storedId = feedback.id;
 
         // Get community insight for context
         const community = await loadCommunityData();
@@ -130,11 +133,13 @@ export function registerSubmitFeedback(server: McpServer) {
         lines.push("_Utilise `export_feedback` pour partager anonymement avec la communauté._");
 
         return {
+          data: {id:feedback.id,stored:true},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {
         return {
           isError: true,
+          ...(storedId ? {data:{id:storedId,stored:true},resultStatus:"partial" as const,warnings:["Feedback was stored, but the follow-up summary failed. Refresh feedback statistics before retrying the submission."]} : {}),
           content: [{
             type: "text" as const,
             text: `Erreur : ${error instanceof Error ? error.message : String(error)}`,
@@ -148,7 +153,7 @@ export function registerSubmitFeedback(server: McpServer) {
 // ─── Feedback Stats ──────────────────────────────────────────
 
 export function registerFeedbackStats(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "feedback_stats",
     {
       title: "Statistiques de prints",
@@ -212,6 +217,7 @@ export function registerFeedbackStats(server: McpServer) {
         }
 
         return {
+          data: {stats,community_prints:community.totalPrints},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {
@@ -230,7 +236,7 @@ export function registerFeedbackStats(server: McpServer) {
 // ─── Export for Community ────────────────────────────────────
 
 export function registerExportFeedback(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "export_feedback",
     {
       title: "Exporter le feedback pour la communauté",
@@ -247,6 +253,7 @@ export function registerExportFeedback(server: McpServer) {
 
         if (feedbacks.length === 0) {
           return {
+            data:{print_count:0,export_date:null,feedbacks:[]},
             content: [{
               type: "text" as const,
               text: "Aucun feedback à exporter. Imprime d'abord et note tes résultats !",
@@ -282,6 +289,7 @@ export function registerExportFeedback(server: McpServer) {
         ];
 
         return {
+          data: {print_count:anonymized.length,export_date:exportData.exportDate,feedbacks:anonymized},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

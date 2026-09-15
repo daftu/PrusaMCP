@@ -1,0 +1,3 @@
+ --exposure-time N   Exposure time (s, default: 10)
+ --faded-layers N    Number of the layers needed for the exposure time fade from initial exposure
+                     time to the exposure time (default: 10)
