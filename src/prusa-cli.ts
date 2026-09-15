@@ -46,7 +46,7 @@ export function runPrusaSlicer(
         resolve({
           exitCode,
           stdout: redact(stdout ?? ""),
-          stderr: redact(stderr || (error ? error.message : "")),
+          stderr: redact(stderr || (error && typeof error.code !== "number" ? error.message : "")),
           ...(error ? { errorCode: typeof error.code === "string" ? error.code === "ETIMEDOUT" ? "process_timeout" : "spawn_failed" : error.killed ? "process_timeout" : "process_failed" } : {}),
         });
       },
