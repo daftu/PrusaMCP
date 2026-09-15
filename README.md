@@ -121,6 +121,7 @@ A title without a filename does not prove that the plate is empty.
 |----------|-------------|---------|
 | `PRUSASLICER_PATH` | Path to the PrusaSlicer executable | Auto-detected |
 | `PRUSASLICER_PROFILES_DIR` | PrusaSlicer profiles folder | macOS: `~/Library/Application Support/PrusaSlicer`; Windows: `%APPDATA%/PrusaSlicer` |
+| `PRUSASLICER_TRUSTED_SCRIPTS` | JSON object mapping administrator-approved script IDs to commands | `{}` (scripts disabled) |
 | `OCTOPRINT_URL` | Your OctoPrint instance URL | — |
 | `OCTOPRINT_API_KEY` | OctoPrint API key | — |
 
@@ -240,3 +241,44 @@ necessarily effective settings. Numeric writes do not enable overrides or
 change checkboxes/dropdowns. A validation dialog or a normalized readback must
 be resolved by inspecting the result, not by assuming the requested value stuck.
 Screenshots remain available as a fallback for custom geometry and visual checks.
+
+
+### Slicing files and host scripts
+
+`slice_prusaslicer` writes to a unique staging directory next to the requested
+output, then publishes the complete file without replacing an existing name.
+An existing destination returns `output_exists`; choose a new `output_gcode`.
+A nonzero process exit always fails. Exit zero without a nonempty output returns
+`output_missing`. Temporary files from the request are removed after completion.
+
+Host `post_process` scripts from imported INI files and 3MF projects are disabled
+by default through an explicit CLI override. An administrator can configure
+`PRUSASLICER_TRUSTED_SCRIPTS`, for example as this environment variable value:
+
+```json
+{"audit":"/opt/print-tools/audit-gcode"}
+```
+
+A client may select `trusted_script_id: "audit"` when calling
+`slice_prusaslicer`. Only that configured command is used, replacing imported
+scripts. Omitting the ID keeps scripts disabled even when the map is configured.
+Unknown IDs and raw command fields are rejected. Responses identify the selected
+policy (`disabled` or `trusted:<id>`); the configured command is redacted from
+native diagnostics. Scripts run with the server user's permissions and receive
+PrusaSlicer's temporary G-code path. This allowlist is not a script sandbox;
+configure only reviewed commands and do not print secrets from scripts.
+
+This behavior is verified against stock PrusaSlicer 2.9.6. Its CLI gives command
+line settings precedence over INI and 3MF settings and prompts before executing a
+script; PrusaMCP supplies confirmation only for a selected configured ID.
+See [Prusa's post-processing documentation](https://help.prusa3d.com/article/post-processing-scripts_283913)
+and the [2.9.6 configuration loading implementation](https://github.com/prusa3d/PrusaSlicer/blob/version_2.9.6/src/CLI/LoadPrintData.cpp).
+Printer start/end/custom G-code is separate from these host scripts.
+
+The isolated real-backend acceptance test requires Python 3 for its generated
+3MF fixture and runs without accessing user projects or printer profiles:
+
+```bash
+npm run build
+PRUSASLICER_REAL_TEST=/Applications/PrusaSlicer.app/Contents/MacOS/PrusaSlicer node --test test/test-slice-real.js
+```

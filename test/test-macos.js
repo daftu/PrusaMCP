@@ -37,9 +37,10 @@ test('configuration honors explicit paths and macOS profile defaults without APP
     const env = { ...process.env, HOME: root, PRUSASLICER_PATH: executable };
     delete env.APPDATA;
     delete env.PRUSASLICER_PROFILES_DIR;
+    delete env.PRUSASLICER_TRUSTED_SCRIPTS;
     const read = () => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e',
       'import {loadConfig} from "./build/config.js"; console.log(JSON.stringify(loadConfig()));'], { env, encoding: 'utf8' }));
-    assert.deepEqual(read(), { executablePath: executable, profilesDir: profiles });
+    assert.deepEqual(read(), { executablePath: executable, profilesDir: profiles, trustedScripts: {} });
     env.PRUSASLICER_PROFILES_DIR = override;
     assert.equal(read().profilesDir, override);
   } finally { rmSync(root, { recursive: true, force: true }); }
