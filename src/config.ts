@@ -13,7 +13,7 @@ const DEFAULT_INSTALL_PATHS = [
 export function detectPrusaSlicerPath(): string | null {
   // 1. Environment variable
   const envPath = process.env.PRUSASLICER_PATH;
-  if (envPath && existsSync(envPath)) return envPath;
+  if (envPath) return envPath; // An explicit override must never silently select another binary.
 
   // 2. Platform-specific install locations
   if (process.platform === "darwin") {

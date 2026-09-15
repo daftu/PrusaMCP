@@ -57,3 +57,57 @@ export async function captureMacWindow(outputPath: string, windowId?: number): P
   await execFileAsync("/usr/sbin/screencapture", ["-x", "-o", "-l", String(window.id), outputPath], { timeout: 15000 });
   return window;
 }
+
+export type PermissionState = "granted" | "denied" | "unknown";
+export interface MacProbeObservation {
+  screen_recording: PermissionState;
+  accessibility: PermissionState;
+  automation: PermissionState;
+  gui_session: "active" | "absent" | "unknown";
+}
+
+// Preflight only: no AX prompt option, Apple Event, activation, or capture.
+// Automation cannot be safely inferred from AX trust; report it as unknown.
+export const PERMISSION_PROBE_SCRIPT = `
+ObjC.import("CoreGraphics");
+ObjC.import("ApplicationServices");
+ObjC.bindFunction("CGPreflightScreenCaptureAccess", ["bool", []]);
+ObjC.bindFunction("AXIsProcessTrusted", ["bool", []]);
+var screen = $.CGPreflightScreenCaptureAccess();
+var session = "unknown";
+if (screen) {
+  var raw = $.CGWindowListCopyWindowInfo(0, 0);
+  var windows = ObjC.deepUnwrap(ObjC.castRefToObject(raw));
+  if (Array.isArray(windows)) session = windows.some(function(w) {
+    return w.kCGWindowOwnerName === "PrusaSlicer" && w.kCGWindowLayer === 0 &&
+      /(?:^| - )PrusaSlicer-\\d/.test(w.kCGWindowName || "");
+  }) ? "active" : "absent";
+}
+JSON.stringify({screen_recording:screen ? "granted" : "denied",
+  accessibility:$.AXIsProcessTrusted() ? "granted" : "denied", automation:"unknown", gui_session:session});
+`;
+
+export function macCapabilities(observation: MacProbeObservation, platform: string) {
+  const supported = platform === "darwin";
+  return {
+    supported,
+    probe_process: supported ? "/usr/bin/osascript (JXA child of MCP host)" : "none",
+    permissions: observation,
+    backends: {
+      jxa_gui: { state: !supported ? "unsupported" : observation.screen_recording === "denied" || observation.accessibility === "denied" ? "blocked" : observation.gui_session === "absent" ? "unavailable" : "unknown",
+        requires: ["screen_recording", "accessibility", "automation"],
+        limitations: ["The current Quartz window selector requires Screen Recording.", "Automation is not probed because sending Apple Events may request permission."] },
+      capture: { state: !supported ? "unsupported" : observation.screen_recording === "denied" ? "blocked" : observation.gui_session === "absent" ? "unavailable" : observation.screen_recording === "granted" && observation.gui_session === "active" ? "available" : "unknown",
+        requires: ["screen_recording"] },
+    },
+  };
+}
+
+export async function probeMacCapabilities(platform: string = process.platform,
+  execute: (script: string) => Promise<string> = async script => (await execFileAsync("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], { timeout: 10000 })).stdout) {
+  let observation: MacProbeObservation = { screen_recording: "unknown", accessibility: "unknown", automation: "unknown", gui_session: "unknown" };
+  if (platform === "darwin") {
+    try { observation = JSON.parse(await execute(PERMISSION_PROBE_SCRIPT)); } catch { /* A failed preflight establishes no permission state. */ }
+  }
+  return macCapabilities(observation, platform);
+}

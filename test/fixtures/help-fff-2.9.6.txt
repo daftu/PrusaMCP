@@ -1,0 +1,3 @@
+ --layer-height N    This setting controls the height (and thus the total number) of the
+                     slices/layers. Thinner layers give better accuracy but take more time to print.
+                     (mm, default: 0.3)

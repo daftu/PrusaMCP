@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
@@ -10,7 +11,7 @@ import { estimateCostFromMesh } from "../cost-estimator.js";
 import { profileToIniSettings, serializeIni } from "../ini-writer.js";
 
 export function registerPrintWizard(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "print_wizard",
     {
       title: "Assistant d'impression complet",
@@ -75,12 +76,15 @@ export function registerPrintWizard(server: McpServer) {
         lines.push("");
 
         // ─── Section 4: Profil si infos disponibles ──
+        let wizardProfile: ReturnType<typeof recommendProfile> | undefined;
+        let wizardCost: ReturnType<typeof estimateCostFromMesh> | undefined;
         if (goal) {
           const p = printer ?? "Generic";
           const n = nozzle ?? 0.4;
           const m = material ?? "PLA";
           const profile = recommendProfile(p, n, goal, m, analysis);
 
+          wizardProfile = profile;
           lines.push(`## 4. Profil recommandé (${profile.goal})`);
           const keySettings = [
             `Layer : ${profile.settings.layer_height.value}mm`,
@@ -103,6 +107,7 @@ export function registerPrintWizard(server: McpServer) {
             profile.settings.print_speed.value as number,
             m,
           );
+          wizardCost = cost;
           lines.push(`**Temps estimé** : ${cost.printTimeFormatted} | **Coût** : ~${cost.totalCostEur}€ (${cost.filamentWeightG}g de filament)`);
           lines.push("");
         }
@@ -178,6 +183,7 @@ export function registerPrintWizard(server: McpServer) {
         }
 
         return {
+          data: {analysis,report:issues,orientations,profile:wizardProfile,cost:wizardCost,questions},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {

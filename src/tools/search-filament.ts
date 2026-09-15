@@ -1,9 +1,10 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { searchFilaments } from "../filament-db.js";
 
 export function registerSearchFilament(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "search_filament",
     {
       title: "Chercher un filament dans la base de données",
@@ -21,6 +22,7 @@ export function registerSearchFilament(server: McpServer) {
 
       if (results.length === 0) {
         return {
+          data:{filaments:results},
           content: [{
             type: "text" as const,
             text: "Aucun filament trouvé. Essaie avec d'autres critères.",
@@ -45,7 +47,8 @@ export function registerSearchFilament(server: McpServer) {
       }
 
       return {
-        content: [{ type: "text" as const, text: lines.join("\n") }],
+        data: {filaments:results},
+          content: [{ type: "text" as const, text: lines.join("\n") }],
       };
     },
   );

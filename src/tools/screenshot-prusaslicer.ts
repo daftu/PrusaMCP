@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { execFile } from "node:child_process";
@@ -90,7 +91,7 @@ function capturePrusaSlicerWindow(outputPath: string): Promise<boolean> {
 }
 
 export function registerScreenshotPrusaSlicer(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "screenshot_prusaslicer",
     {
       title: "Capturer l'écran de PrusaSlicer",
@@ -133,6 +134,7 @@ export function registerScreenshotPrusaSlicer(server: McpServer) {
         const base64 = imageBuffer.toString("base64");
 
         return {
+          data:{artifact:{path:screenshotPath,media_type:"image/png"}},
           content: [
             {
               type: "image" as const,

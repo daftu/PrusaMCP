@@ -4,6 +4,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { loadConfig } from "./config.js";
 
+import { registerCapabilities } from "./tools/capabilities.js";
+
 // Tools
 import { registerAnalyzeMesh } from "./tools/analyze-mesh.js";
 import { registerRecommendProfile } from "./tools/recommend-profile.js";
@@ -62,8 +64,9 @@ async function main() {
   registerScreenshotPrusaSlicer(server);
   registerPostprocessGcode(server);
   registerUploadPrint(server);
+  registerCapabilities(server, config);
 
-  console.error("20 tools enregistrés. PrusaMCP v2.1.0 ready.");
+  console.error("21 tools enregistrés. PrusaMCP v2.1.0 ready.");
 
   const transport = new StdioServerTransport();
   await server.connect(transport);

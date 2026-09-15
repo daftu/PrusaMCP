@@ -1,3 +1,4 @@
+import { registerContractTool } from "../register-tool.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { existsSync } from "node:fs";
@@ -17,7 +18,7 @@ export async function parseModel(filePath: string): Promise<StlData> {
 }
 
 export function registerAnalyzeMesh(server: McpServer) {
-  server.registerTool(
+  registerContractTool(server,
     "analyze_mesh",
     {
       title: "Analyser un mesh 3D",
@@ -78,6 +79,7 @@ export function registerAnalyzeMesh(server: McpServer) {
         ];
 
         return {
+          data: {name:mesh.name,analysis},
           content: [{ type: "text" as const, text: lines.join("\n") }],
         };
       } catch (error) {
