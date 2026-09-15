@@ -406,7 +406,8 @@ alone has no bundle import action. A missing helper reports
 With the helper configured, installed preset tuples can also be exported. The
 snapshot retains a native flattened bundle of the selected presets, so later
 profile edits cannot change its export. Overrides may produce native generated
-preset names to preserve separate values for each extruder. A snapshot from a
+material names to preserve separate values for each extruder; printer and print
+names remain unchanged so name-based compatibility conditions still apply. A snapshot from a
 flat file has no selected preset set and cannot be exported as a bundle.
 
 The helper runs in a separate process and uses no GUI or private application ABI.

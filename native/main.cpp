@@ -58,6 +58,12 @@ static json run(const json &request) {
         boost::property_tree::ptree source;
         boost::property_tree::read_ini(request.at("bundle_path").get<std::string>(), source);
         for (const auto &section : source) imported_sections.insert(section.first);
+        for (auto *collection : collections(bundle)) {
+            std::vector<std::string> collisions;
+            for (const auto &preset : collection->get_presets())
+                if (preset.is_system && imported_sections.count(collection->section_name() + ":" + preset.name)) collisions.push_back(preset.name);
+            for (const auto &name : collisions) collection->delete_preset(name);
+        }
         auto result = bundle.load_configbundle(request.at("bundle_path").get<std::string>(), {}, ForwardCompatibilitySubstitutionRule::Enable);
         substitutions = std::move(result.first);
         if (result.second == 0) throw std::runtime_error("native_configuration_rejected");
@@ -124,9 +130,13 @@ static json run(const json &request) {
             // Sanitize again because native preset defaults restore omitted options.
             PresetBundle sanitized;
             for (auto *collection : collections(output)) for (const auto &preset : collection->get_presets())
-                if (!preset.is_default) copy(sanitized, *collection, preset, removed);
-            const std::string exported_printer = output.printers.get_selected_preset_name();
-            const std::string exported_print = (sla ? output.sla_prints : output.prints).get_selected_preset_name();
+                if (!preset.is_default) {
+                    const std::string &name = collection == &output.printers ? printer_name :
+                        collection == &(sla ? output.sla_prints : output.prints) ? print_name : preset.name;
+                    sanitized.get_presets(collection->type()).load_preset("", name, sanitize(preset.config, removed), false);
+                }
+            const std::string exported_printer = printer_name;
+            const std::string exported_print = print_name;
             std::vector<std::string> exported_materials;
             if (sla) exported_materials.push_back(output.sla_materials.get_selected_preset_name());
             else for (const auto &extruder : output.extruders_filaments) exported_materials.push_back(extruder.get_selected_preset_name());

@@ -58,8 +58,8 @@ validation runs before a resolved output is returned.
 Successful stdout is JSON with `protocol: 1`, `version: "2.9.6"`, `profiles`
 (`kind`, `name`, native serialized `settings`), `substitutions` (`kind`, `name`,
 `key`) and `omitted_fields`. Resolve also returns `technology` and `selection`.
-Overrides use the native full-config splitter, producing `Snapshot` preset
-names and distinct material names per extruder. In this case `selection` names
+Overrides use the native full-config splitter, preserving source printer/print
+names and producing distinct native material names per extruder. In this case `selection` names
 the exported presets and `source_selection` retains the requested tuple.
 
 The exporter receives a fresh bundle containing only sanitized copies of the

@@ -74,6 +74,38 @@ test('installed native preset tuple exports only selected profiles and preserves
   assert.equal(second.settings.layer_height,'0.21');assert.equal(second.settings.temperature,'223');
   assert.deepEqual(settingsWithoutPresetNames(second.settings),settingsWithoutPresetNames(first.settings));
 });
+test('installed native preset tuple exports and reimports unchanged names',native,async t=>{
+  const f=await configurationFixture(t);const service=new ConfigurationService(f.config);
+  const models=await service.profiles.listPrinterModels('FFF');const printer=models[0].printers[0];
+  const presets=await service.profiles.listPresets(printer.id,'FFF');
+  const print=presets.profiles.find(p=>p.kind==='print');const filament=presets.profiles.find(p=>p.kind==='filament');
+  const first=await service.resolvePresets({printer_profile_id:printer.id,print_profile_id:print.id,material_profile_ids:[filament.id]});
+  const path=join(f.directory,'installed-export.ini');await service.exportConfiguration(first.snapshot_id,'bundle',path);
+  const exported=readIni(await readFile(path,'utf8')).sections.filter(s=>/^(print|filament|printer):/.test(s.name));
+  assert.deepEqual(exported.map(s=>s.name).sort(),[`filament:${filament.name}`,`print:${print.name}`,`printer:${printer.name}`].sort());
+  const imported=await service.importConfiguration(path,'installed-again');t.after(()=>rm(dirname(imported.artifact.path),{recursive:true,force:true}));
+  assert.deepEqual(imported.profiles.map(p=>`${p.kind}:${p.name}`).sort(),exported.map(s=>s.name).sort());
+  const selected=kind=>imported.profiles.find(p=>p.kind===kind).id;
+  const second=await service.resolvePresets({printer_profile_id:selected('printer'),print_profile_id:selected('print'),material_profile_ids:[selected('filament')]});
+  assert.deepEqual(settingsWithoutPresetNames(second.settings),settingsWithoutPresetNames(first.settings));
+});
+test('native override export preserves printer name used by compatibility condition',native,async t=>{
+  const f=await configurationFixture(t);const service=new ConfigurationService(f.config);
+  const input=join(f.directory,'condition.ini');
+  await writeFile(input,'[printer:Same]\nprinter_technology = FFF\nnozzle_diameter = 0.4\n[print:Same]\nlayer_height = 0.2\ncompatible_printers_condition = printer_preset=="Same"\n[filament:Same]\ntemperature = 217\n');
+  const imported=await service.importConfiguration(input,'condition');t.after(()=>rm(dirname(imported.artifact.path),{recursive:true,force:true}));
+  const first=await service.resolvePresets(tuple(imported));assert.equal(first.settings.temperature,'217');
+  const changed=await service.resolvePresets(tuple(imported),{temperature:'220'});
+  const path=join(f.directory,'condition-export.ini');await service.exportConfiguration(changed.snapshot_id,'bundle',path);
+  const exported=readIni(await readFile(path,'utf8')).sections;
+  assert.equal(exported.find(s=>s.name==='print:Same').settings.compatible_printers_condition,'printer_preset=="Same"');
+  assert.ok(exported.some(s=>s.name==='printer:Same'));
+  const again=await service.importConfiguration(path,'condition-again');t.after(()=>rm(dirname(again.artifact.path),{recursive:true,force:true}));
+  const selected=kind=>again.profiles.find(p=>p.kind===kind).id;
+  const second=await service.resolvePresets({printer_profile_id:selected('printer'),print_profile_id:selected('print'),material_profile_ids:[selected('filament')]});
+  assert.equal(second.settings.temperature,'220');
+  assert.deepEqual(settingsWithoutPresetNames(second.settings),settingsWithoutPresetNames(changed.settings));
+});
 test('native SLA bundle retains resin settings and rejects mixed technology tuple',native,async t=>{
   const f=await configurationFixture(t);const service=new ConfigurationService(f.config);
   const path=join(f.directory,'sla.ini');await writeFile(path,'[printer:Same]\nprinter_technology = SLA\n[sla_print:Same]\nlayer_height = 0.05\n[sla_material:Same]\nmaterial_type = Tough\nexposure_time = 7\n');
