@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { entries, model, mesh, writeFixture } from "./project-fixtures.js";
 import { readProjectGeometry } from "../build/project-model.js";
 import { parse3mf } from "../build/threemf-parser.js";
+import { analyzeMesh } from "../build/mesh-analyzer.js";
 import { readArchive } from "../build/project-archive.js";
 async function fixture(t, xml, extra = {}) {
   const dir = await mkdtemp(join(tmpdir(), "3mf-scene-"));
@@ -43,6 +44,32 @@ test("component and instance transforms compose before unit conversion", async (
     min: { x: 110, y: 30, z: 0 },
     max: { x: 120, y: 40, z: 10 },
   });
+});
+test("mirrored build and component transforms preserve winding and volume", async (t) => {
+  const mirror = "-1 0 0 0 1 0 0 0 1 10 0 0";
+  const p = await fixture(
+    t,
+    model(
+      `<object id="1">${mesh}</object><object id="2"><components><component objectid="1" transform="${mirror}"/></components></object>`,
+      `<item objectid="1"/><item objectid="1" transform="${mirror}"/><item objectid="2" transform="1 0 0 0 1 0 0 0 1 10 0 0"/>`,
+    ),
+  );
+  const scene = await readProjectGeometry(p);
+  assert.deepEqual(scene.objects[0].triangles[0], [0, 2, 1]);
+  const flat = await parse3mf(p);
+  assert.equal(flat.triangles.length, 12);
+  assert.ok(Math.abs(analyzeMesh(flat).volume - 0.5) < 1e-12);
+  for (const i of [0, 4, 8])
+    assert.deepEqual(flat.triangles[i].normal, { x: 0, y: 0, z: -1 });
+});
+test("compact acyclic component graph hits expansion limit before creating all leaves", async (t) => {
+  const resources = [`<object id="1">${mesh}</object>`];
+  for (let id = 2; id <= 17; id++)
+    resources.push(
+      `<object id="${id}"><components><component objectid="${id - 1}"/><component objectid="${id - 1}"/></components></object>`,
+    );
+  const p = await fixture(t, model(resources.join(""), '<item objectid="17"/>'));
+  await assert.rejects(readProjectGeometry(p), /geometry_limit: component expansion exceeds 100000 visits/);
 });
 test("missing, external, cyclic and required extension geometry fail instead of claiming complete", async (t) => {
   for (const xml of [

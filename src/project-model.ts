@@ -160,6 +160,7 @@ export function sceneFromArchive(archive: ProjectArchive) {
   const byId = new Map(objects.map((o) => [o.object_id, o]));
   const buildNodes = children(child(root, "build"), "item");
   const instances: SceneInstance[] = [];
+  let expansionVisits = 0;
   for (const [i, item] of buildNodes.entries()) {
     const meshes: SceneInstance["meshes"] = [];
     const initial = transform(item.attrs.transform);
@@ -178,6 +179,8 @@ export function sceneFromArchive(archive: ProjectArchive) {
       0,
     ];
     const visit = (id: string, matrix: number[], ancestors: Set<string>) => {
+      if (++expansionVisits > 100000)
+        throw new Error("geometry_limit: component expansion exceeds 100000 visits");
       const obj = byId.get(id);
       if (!obj)
         throw new Error("missing_reference: referenced object is absent");

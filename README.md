@@ -440,6 +440,7 @@ unit; `transform_mm` and instance bounding boxes use millimeters. Object, volume
 and instance IDs are scoped to the returned SHA-256 revision. Unused resources
 remain resources and are not added to the build. Required geometry extensions,
 cross-part references, missing objects and cyclic components are rejected.
+Component expansion is limited to 100000 object visits per scene read.
 
 `read_project_metadata(path, resolve_effective=false)` links PrusaSlicer object
 and volume overrides to those IDs. It reports roles, printability and zero-based

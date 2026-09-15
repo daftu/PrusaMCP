@@ -15,11 +15,18 @@ export async function parse3mf(filePath: string): Promise<StlData> {
       const meta = metadata.objects.find(
         (o) => o.object_id === mesh.object_id,
       )!;
+      const m = mesh.transform_mm;
+      const mirrored =
+        m[0] * (m[4] * m[8] - m[5] * m[7]) -
+          m[1] * (m[3] * m[8] - m[5] * m[6]) +
+          m[2] * (m[3] * m[7] - m[4] * m[6]) <
+        0;
       for (const volume of meta.volumes.filter((v) => v.role === "ModelPart"))
         for (let i = volume.first_triangle; i <= volume.last_triangle; i++) {
-          const [v1, v2, v3] = obj.triangles[i].map((index) =>
+          let [v1, v2, v3] = obj.triangles[i].map((index) =>
             point(obj.vertices[index], mesh.transform_mm),
           );
+          if (mirrored) [v2, v3] = [v3, v2];
           triangles.push({ v1, v2, v3, normal: normal(v1, v2, v3) });
         }
     }
