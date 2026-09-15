@@ -5,6 +5,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { loadConfig } from "./config.js";
 
 import { ConfigurationService } from "./config-resolver.js";
+import { registerProjectTools } from './tools/projects.js';
 import { registerProfileTools } from "./tools/profiles.js";
 import { registerValidateSettings } from "./tools/validate-settings.js";
 
@@ -71,9 +72,10 @@ async function main() {
   registerCapabilities(server, config);
   const configurations = new ConfigurationService(config);
   registerProfileTools(server, configurations);
+  registerProjectTools(server, configurations);
   registerValidateSettings(server, configurations);
 
-  console.error("27 tools enregistrés. PrusaMCP v2.1.0 ready.");
+  console.error("30 tools enregistrés. PrusaMCP v2.1.0 ready.");
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
