@@ -1,13 +1,14 @@
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, extname, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { detectCliCapabilities } from "./capabilities.js";
 import { fileRevision } from "./contracts.js";
 import { runPrusaSlicer } from "./prusa-cli.js";
 import { readIni, serializeNativeSettings, omitPrivateSettings } from "./ini-reader.js";
 import { assertOutputAvailable, createArtifactStage, publishArtifact, removeArtifactStage } from "./artifacts.js";
-import { ProfileService, copyProfileData } from "./profiles.js";
+import { nativeConfiguration, type NativeProfile } from "./native-config.js";
+import { ProfileService, copyProfileData, type PresetReference } from "./profiles.js";
 import type { PrusaConfig } from "./types.js";
 
 export interface ConfigurationSnapshot {
@@ -27,6 +28,8 @@ export interface ConfigurationSnapshot {
 export class ConfigurationService {
   private snapshots = new Map<string, ConfigurationSnapshot>();
   private workspaces = new Map<string, string>();
+  private imported = new Map<string, { reference: PresetReference; bundle: string }>();
+  private selectedBundles = new Map<string, string>();
   readonly profiles: ProfileService;
   constructor(readonly config: PrusaConfig) { this.profiles = new ProfileService(config); }
 
@@ -85,6 +88,15 @@ export class ConfigurationService {
 
   async resolvePresets(tuple: { printer_profile_id: string; print_profile_id: string; material_profile_ids: string[] }, overrides: Record<string, string> = {}): Promise<ConfigurationSnapshot> {
     await this.requireVersion();
+    const importedPrinter = this.imported.get(tuple.printer_profile_id);
+    if (importedPrinter) {
+      const references = [tuple.printer_profile_id, tuple.print_profile_id, ...tuple.material_profile_ids].map(id => this.imported.get(id));
+      if (references.some(item => !item || item.bundle !== importedPrinter.bundle)) throw new Error("incompatible_preset: select profiles from the same imported bundle");
+      const [printer, print, ...materials] = references.map(item => item!.reference);
+      const technology = printer.technology;
+      if (printer.kind !== "printer" || print.kind !== (technology === "FFF" ? "print" : "sla_print") || materials.some(p => p.kind !== (technology === "FFF" ? "filament" : "sla_material"))) throw new Error("incompatible_preset: selected profile kinds do not form a tuple");
+      return this.resolveNativeTuple({ printer: printer.name, print: print.name, materials: materials.map(p => p.name) }, overrides, importedPrinter.bundle);
+    }
     const printer = this.profiles.getReference(tuple.printer_profile_id);
     const print = this.profiles.getReference(tuple.print_profile_id);
     const materials = tuple.material_profile_ids.map(id => this.profiles.getReference(id));
@@ -94,6 +106,7 @@ export class ConfigurationService {
       throw new Error("incompatible_preset: select a complete compatible native tuple for every extruder");
     }
     for (const reference of [printer, print, ...materials]) this.profiles.assertUnambiguous(reference);
+    if (process.env.PRUSAMCP_NATIVE_CONFIG_PATH) return this.resolveNativeTuple({ printer: printer.name, print: print.name, materials: materials.map(p => p.name) }, overrides);
     const temporary = await copyProfileData(this.config.profilesDir);
     try {
       const args = ["--printer-profile", printer.name, "--print-profile", print.name, "--material-profile", materials.map(material => material.name).join(",")];
@@ -139,9 +152,56 @@ export class ConfigurationService {
     } finally { await rm(temporary, { recursive: true, force: true }); }
   }
 
+  private async resolveNativeTuple(selection: { printer: string; print: string; materials: string[] }, overrides: Record<string, string>, bundle?: string) {
+    if (omitPrivateSettings(overrides).omitted_fields.length) throw new Error("protected_setting: host secrets and scripts cannot be overrides");
+    const temporary = await mkdtemp(join(tmpdir(), "prusamcp-native-resolve-"));
+    const datadir = bundle ? join(temporary, "data") : await copyProfileData(this.config.profilesDir);
+    if (bundle) await mkdir(datadir);
+    try {
+      const output = join(temporary, "effective.ini");
+      const outputBundle = join(temporary, "selected.ini");
+      const overridePath = join(temporary, "overrides.ini");
+      await writeFile(overridePath, serializeNativeSettings(overrides), { mode: 0o600 });
+      const result = await nativeConfiguration({operation: "resolve", datadir, ...(bundle ? {bundle_path: bundle} : {}), selection,
+        ...(Object.keys(overrides).length ? {overrides_path: overridePath} : {}), output_flat_path: output, output_bundle_path: outputBundle}, temporary);
+      const effective = readIni(await readFile(output, "utf8")).settings;
+      const snapshot = this.saveSnapshot(effective, overrides, [{source: "presets", description: "Native selected preset tuple, resolved in isolation. Unsaved GUI state is not included."},
+        ...(Object.keys(overrides).length ? [{source: "overrides" as const, description: "Explicit native override layer after selected presets."}] : [])], false);
+      snapshot.omitted_fields = [...new Set([...snapshot.omitted_fields, ...result.omitted_fields])].sort();
+      snapshot.converted_fields = [...new Set([...snapshot.converted_fields, ...result.substitutions.map(item => item.key)])].sort();
+      this.snapshots.set(snapshot.snapshot_id, structuredClone(snapshot));
+      this.snapshots.set(snapshot.revision.sha256, structuredClone(snapshot));
+      this.selectedBundles.set(snapshot.snapshot_id, await readFile(outputBundle, "utf8"));
+      return snapshot;
+    } finally { await rm(temporary, {recursive: true, force: true}); await rm(datadir, {recursive: true, force: true}); }
+  }
+
+  private async importBundle(path: string, workspace_id: string) {
+    await this.requireVersion();
+    const directory = await mkdtemp(join(tmpdir(), "prusamcp-bundle-"));
+    const datadir = await copyProfileData(this.config.profilesDir);
+    let retained = false;
+    try {
+      const bundle = join(directory, "imported.ini");
+      const result = await nativeConfiguration({operation: "import", datadir, bundle_path: resolve(path), output_bundle_path: bundle}, directory);
+      const profiles = result.profiles.map((profile: NativeProfile): PresetReference => {
+        const technology = profile.kind.startsWith("sla_") || profile.settings.printer_technology === "SLA" ? "SLA" : "FFF";
+        return {id: createHash("sha256").update(JSON.stringify([workspace_id, directory, profile.kind, profile.name])).digest("hex"),
+          kind: profile.kind, name: profile.name, origin: "user", vendor_id: null, directory, technology,
+          ...(profile.kind === "printer" ? {extruder_count: technology === "FFF" ? (profile.settings.nozzle_diameter ?? "").split(",").length : 0} : {}),
+          compatible_printer_ids: [], compatible_print_ids: []};
+      });
+      for (const reference of profiles) this.imported.set(reference.id, {reference, bundle});
+      retained = true;
+      return {workspace_id, format: "bundle" as const, profiles, artifact: {path: bundle, media_type: "text/plain"}, native_validated: true as const,
+        omitted_fields: result.omitted_fields, converted_fields: [...new Set(result.substitutions.map(item => item.key))],
+        input_diagnostics_known: false, unsupported_fields: [] as string[]};
+    } finally { await rm(datadir, {recursive: true, force: true}); if (!retained) await rm(directory, {recursive: true, force: true}); }
+  }
+
   async importConfiguration(path: string, workspace_id: string) {
     const parsed = readIni(await readFile(path, "utf8"));
-    if (parsed.format === "bundle") throw new Error("blocked_by_capability: stock CLI does not import preset bundles; sparse preset files do not resolve inheritance");
+    if (parsed.format === "bundle") return this.importBundle(path, workspace_id);
     const snapshot = await this.resolveFile(path);
     let directory = this.workspaces.get(workspace_id);
     if (!directory) {
@@ -153,14 +213,15 @@ export class ConfigurationService {
   }
 
   async exportConfiguration(snapshot_id: string, format: "flat_ini" | "bundle", output_path: string) {
-    if (format === "bundle") throw new Error("blocked_by_capability: native flattened selected-preset bundle roundtrip is not verified on stock CLI");
     const snapshot = this.getSnapshot(snapshot_id);
+    const selected = format === "bundle" ? this.selectedBundles.get(snapshot.snapshot_id) : undefined;
+    if (format === "bundle" && !selected) throw new Error("bundle_selection_required: resolve an explicit preset tuple with the native bundle backend before exporting its selected presets");
     await assertOutputAvailable(output_path);
     const stage = await createArtifactStage(output_path);
     try {
-      await writeFile(stage.path, serializeNativeSettings(snapshot.settings), { mode: 0o600 });
+      await writeFile(stage.path, selected ?? serializeNativeSettings(snapshot.settings), { mode: 0o600 });
       await publishArtifact(stage.path, output_path);
     } finally { await removeArtifactStage(stage.directory); }
-    return { artifact: { path: output_path, media_type: "text/plain" }, source_revision: snapshot.revision, format: "flat_ini" as const, omitted_fields: snapshot.omitted_fields };
+    return { artifact: { path: output_path, media_type: "text/plain" }, source_revision: snapshot.revision, format, omitted_fields: snapshot.omitted_fields };
   }
 }

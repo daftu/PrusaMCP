@@ -325,7 +325,7 @@ settings carry `effective_known: false` and `effective_value: null`.
 
 ## Native presets and configuration (PrusaSlicer 2.9.6)
 
-The configuration tools use stock PrusaSlicer CLI with isolated data directories.
+The configuration tools use stock PrusaSlicer CLI and an optional native preset helper, both with isolated data directories.
 They do not change the active GUI project, run slicing, or install presets in the
 user's profile directory. Set `PRUSASLICER_PATH` and, for installed preset queries,
 `PRUSASLICER_PROFILES_DIR` as described above.
@@ -336,8 +336,8 @@ user's profile directory. Set `PRUSASLICER_PATH` and, for installed preset queri
 | `list_presets` | Lists compatible print/material IDs for a returned printer ID. |
 | `resolve_configuration` | Resolves one saved INI/3MF or a complete preset tuple, with optional overrides. |
 | `validate_settings` | Checks typed global edits against a snapshot revision and then native validation; does not apply edits. An empty changes list returns the catalog and validates the snapshot. |
-| `import_configuration` | Imports and validates a flat INI in a server-managed workspace. |
-| `export_configuration` | Writes a flat INI snapshot to a new path; existing files are never replaced. |
+| `import_configuration` | Imports a flat INI or native preset bundle in a server-managed workspace. |
+| `export_configuration` | Writes a flat INI snapshot or its selected native preset bundle; existing files are never replaced. |
 
 For example, resolve a saved configuration:
 
@@ -385,11 +385,34 @@ prove that no conversion occurred. These snapshots describe saved/effective
 configuration, not unsaved GUI state. Snapshot and workspace IDs belong to the
 running MCP server session.
 
-**Current limitation:** named preset bundle import and bundle export return
-`blocked_by_capability`. Stock CLI has no bundle import action, and the verified
-`--load bundle.ini --save` path ignores named preset sections. The tools do not
-replace native inheritance with a custom implementation. Flat import/export is
-available; full named-bundle round trips are not supported.
+### Named preset bundles
+
+Build the [native preset helper](native/README.md) from the pinned PrusaSlicer
+2.9.6 source and set `PRUSAMCP_NATIVE_CONFIG_PATH` to its executable. It calls
+PrusaSlicer's own preset loader, compatibility checks and exporter. Stock CLI
+alone has no bundle import action. A missing helper reports
+`native_backend_missing`; flat INI and saved-project operations remain available.
+
+1. Call `import_configuration` with `path` and `workspace_id`. A bundle import
+   returns separate profile IDs, including profiles with the same name in
+   different categories. It does not select a default tuple or return a snapshot.
+2. Choose the printer, print and material IDs from that response and pass them
+   to `resolve_configuration` with `base.type = "presets"`. All IDs must belong
+   to the same imported bundle. Compatibility is checked by the native helper
+   during resolution; empty compatibility arrays on imported IDs are not a verdict.
+3. Pass the resolved `snapshot_id` to `export_configuration` with
+   `format = "bundle"` and a new `output_path`.
+
+With the helper configured, installed preset tuples can also be exported. The
+snapshot retains a native flattened bundle of the selected presets, so later
+profile edits cannot change its export. Overrides may produce native generated
+preset names to preserve separate values for each extruder. A snapshot from a
+flat file has no selected preset set and cannot be exported as a bundle.
+
+The helper runs in a separate process and uses no GUI or private application ABI.
+Its sources and pinned build instructions are included; no prebuilt helper is
+bundled with the npm package. See its AGPL-3.0-or-later notices before distributing
+a compiled helper.
 
 Host connection secrets and executable `post_process` scripts are omitted from
 configuration results and exports; omissions list field names only. Custom

@@ -34,5 +34,5 @@ test('stock flat export reimports effective settings except explicit omissions',
   assert.ok(result.omitted_fields.includes('printhost_apikey'));
   assert.ok(result.omitted_fields.includes('post_process'));
   assert.doesNotMatch(await readFile(output,'utf8'),/private-fixture/);
-  await assert.rejects(service.exportConfiguration(first.snapshot_id,'bundle',join(f.directory,'bundle.ini')),/blocked_by_capability/);
+  await assert.rejects(service.exportConfiguration(first.snapshot_id,'bundle',join(f.directory,'bundle.ini')),/bundle_selection_required/);
 });

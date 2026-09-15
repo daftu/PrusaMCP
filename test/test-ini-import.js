@@ -34,9 +34,12 @@ test('stock flat import validates in managed workspace without changing input or
   assert.deepEqual(await readFile(path),before);
   assert.deepEqual(await readFile(join(f.profilesDir,'vendor','Synthetic.ini')),profilesBefore);
 });
-test('bundle import reports native capability gap rather than silently importing defaults',async t=>{
+test('bundle import requires the configured native helper rather than importing defaults',async t=>{
   const f=await configurationFixture(t);const service=new ConfigurationService(f.config);
   const path=join(f.directory,'bundle.ini');
   await writeFile(path,'[print:Print]\nlayer_height = 0.17\n[filament:Material]\ntemperature = 217\n[printer:Printer]\nnozzle_diameter = 0.6\n');
-  await assert.rejects(service.importConfiguration(path,'fixture'),/blocked_by_capability/);
+  service.requireVersion=async()=>{};
+  const previous=process.env.PRUSAMCP_NATIVE_CONFIG_PATH;delete process.env.PRUSAMCP_NATIVE_CONFIG_PATH;
+  t.after(()=>{if(previous===undefined)delete process.env.PRUSAMCP_NATIVE_CONFIG_PATH;else process.env.PRUSAMCP_NATIVE_CONFIG_PATH=previous;});
+  await assert.rejects(service.importConfiguration(path,'fixture'),/native_backend_missing/);
 });
